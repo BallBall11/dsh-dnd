@@ -1,0 +1,5 @@
+node_modules/
+*.log
+.DS_Store
+# Note: lib/ is intentionally TRACKED — it is the built release artifact, so a
+# `dsh plugin add link:<repo>` works immediately after clone without a build.

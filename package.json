@@ -1,0 +1,48 @@
+{
+  "name": "dsh-dnd",
+  "version": "0.1.0",
+  "description": "D&D for DSH: cohesive Host tool suite (dice, SRD, mechanics, sheets, XP, tracking) plus a panel-oriented Client character panel. No theme skin.",
+  "type": "module",
+  "main": "lib/host/dnd-core.mjs",
+  "exports": {
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./host/*": "./lib/host/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "scripts/install.ps1",
+    "scripts/install.sh"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs && node --check lib/client.js",
+    "watch": "node scripts/watch.mjs",
+    "typecheck": "node --check src/client/panel.js",
+    "test": "node test/parse.test.mjs",
+    "test:e2e": "node test/e2e.host.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<you>/dsh-dnd.git"
+  }
+}

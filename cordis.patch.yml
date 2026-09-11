@@ -1,0 +1,30 @@
+# dsh-dnd bundle patch
+#
+# This is the `dsh.bundle.patch` layer of the published npm package. Installed
+# via
+#
+#   dsh plugin --profile <name> add dsh-dnd@<version>
+#
+# the command reconciles `dsh.profile.bundles` against installed packages and,
+# seeing this declaration, appends `dsh-dnd` to the bundle stack. Profile boot
+# then merges THIS patch — one `insert` mounting the D&D Host tool rows — and
+# loads the Client panel via `dsh.client`. No profile file edits needed.
+#
+# Each row is a cohesive Host tool plugin. They resolve the **host** `fs`
+# service through the scope chain, so they sit outside any `isolate` realm.
+- insert:
+    - id: dnd-core
+      name: ./lib/host/dnd-core.mjs
+      config: {}
+    - id: dnd-mechanics
+      name: ./lib/host/dnd-mechanics.mjs
+      config: {}
+    - id: dnd-sheet
+      name: ./lib/host/dnd-sheet.mjs
+      config: {}
+    - id: dnd-xp
+      name: ./lib/host/dnd-xp.mjs
+      config: {}
+    - id: dnd-track
+      name: ./lib/host/dnd-track.mjs
+      config: {}
