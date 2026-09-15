@@ -37,8 +37,9 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node test/build.test.mjs",
-    "verify": "node scripts/verify-client.mjs"
+    "test": "node test/sheet-parse.test.mjs && node test/host.test.mjs && node test/build.test.mjs",
+    "verify": "node scripts/verify-client.mjs",
+    "check": "npm run build && npm test && npm run verify"
   },
   "license": "MIT"
 }
