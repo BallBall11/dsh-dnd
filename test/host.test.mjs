@@ -244,6 +244,47 @@ await test('dispose() unregisters everything', async () => {
   assert.ok(names.length > 0)
 })
 
+// --- late-registering fs --------------------------------------------------
+// The first live run failed exactly here: `inject` was ['tools'] only, so
+// apply() ran before the filesystem backend existed, `ctx.get('fs')` returned
+// undefined, and every fs-backed tool answered "fs service unavailable"
+// forever — while the four pure tools worked, which made it look like a data
+// problem rather than a wiring one. The families must re-read the service per
+// call instead of capturing it at mount.
+await test('fs-backed tools work when fs appears AFTER apply()', async () => {
+  const late = []
+  let fsAvailable = false
+  const lateCtx = {
+    get(name) {
+      if (name === 'fs') return fsAvailable ? fsService : undefined
+      if (name === 'tools') return { register: (t) => { late.push(t); return () => {} } }
+      return undefined
+    },
+  }
+
+  const mod = await import('../src/host/index.mjs?late-fs')
+  mod.apply(lateCtx)
+
+  const before = late.find((t) => t.name === 'dnd_character_get')
+  assert.ok(before !== undefined, 'the tool must still register without fs')
+  assert.match(String(await before.execute({ character: 'alice' })), /fs service unavailable/,
+    'before fs exists the tool should say so honestly')
+
+  // fs comes up later, as it does in a real boot.
+  fsAvailable = true
+
+  const out = String(await late.find((t) => t.name === 'dnd_character_get').execute({ character: 'alice' }))
+  assert.ok(!out.includes('fs service unavailable'),
+    'after fs registers the tool must pick it up, not replay the mount-time miss')
+  assert.match(out, /Alice/, 'and it must return real data: ' + out.slice(0, 200))
+})
+
+await test('inject declares fs as a hard dependency', async () => {
+  assert.ok(host.inject.includes('fs'),
+    "inject must list 'fs' so Cordis holds the fiber until the backend exists; got " + JSON.stringify(host.inject))
+  assert.ok(host.inject.includes('tools'))
+})
+
 console.log('')
 if (failures > 0) {
   console.error(`host.test.mjs: ${failures} failure(s)`)
