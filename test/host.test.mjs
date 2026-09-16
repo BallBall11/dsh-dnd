@@ -244,13 +244,15 @@ await test('dispose() unregisters everything', async () => {
   assert.ok(names.length > 0)
 })
 
-// --- late-registering fs --------------------------------------------------
-// The first live run failed exactly here: `inject` was ['tools'] only, so
-// apply() ran before the filesystem backend existed, `ctx.get('fs')` returned
-// undefined, and every fs-backed tool answered "fs service unavailable"
-// forever — while the four pure tools worked, which made it look like a data
-// problem rather than a wiring one. The families must re-read the service per
-// call instead of capturing it at mount.
+// --- late-registering fs, without gating the mount on it ------------------
+// The first live run failed here: the families captured `ctx.get('fs')` once
+// at mount, so apply() running before the filesystem backend existed cached
+// undefined forever and every fs-backed tool answered "fs service unavailable"
+// — while the six pure tools worked, which made it look like a data problem.
+//
+// The fix is lazy per-call reads, NOT declaring fs in `inject`. Declaring it
+// would gate the whole plugin on the filesystem and take the six pure tools
+// down with it, which defeats the per-family isolation.
 await test('fs-backed tools work when fs appears AFTER apply()', async () => {
   const late = []
   let fsAvailable = false
@@ -263,12 +265,19 @@ await test('fs-backed tools work when fs appears AFTER apply()', async () => {
   }
 
   const mod = await import('../src/host/index.mjs?late-fs')
-  mod.apply(lateCtx)
+  const dispose = mod.apply(lateCtx)
+  assert.equal(typeof dispose, 'function')
+
+  // Every tool registered even though fs is absent: nothing was gated on it.
+  assert.equal(late.length, 11, 'all 11 tools must register without fs; got ' + late.length)
 
   const before = late.find((t) => t.name === 'dnd_character_get')
-  assert.ok(before !== undefined, 'the tool must still register without fs')
   assert.match(String(await before.execute({ character: 'alice' })), /fs service unavailable/,
-    'before fs exists the tool should say so honestly')
+    'before fs exists the fs-backed tool should say so honestly')
+
+  // The pure tools must be unaffected by the missing filesystem.
+  const rollBefore = String(await late.find((t) => t.name === 'dnd_roll').execute({ spec: '2d6+3' }))
+  assert.match(rollBefore, /2d6\+3 = \[/, 'a pure tool must work with no fs: ' + rollBefore)
 
   // fs comes up later, as it does in a real boot.
   fsAvailable = true
@@ -279,10 +288,11 @@ await test('fs-backed tools work when fs appears AFTER apply()', async () => {
   assert.match(out, /Alice/, 'and it must return real data: ' + out.slice(0, 200))
 })
 
-await test('inject declares fs as a hard dependency', async () => {
-  assert.ok(host.inject.includes('fs'),
-    "inject must list 'fs' so Cordis holds the fiber until the backend exists; got " + JSON.stringify(host.inject))
-  assert.ok(host.inject.includes('tools'))
+await test('inject gates on tools only, so a missing fs cannot unmount the pure tools', async () => {
+  assert.ok(host.inject.includes('tools'), 'tools is the one hard dependency')
+  assert.ok(!host.inject.includes('fs'),
+    "fs must stay out of inject: gating on it would unmount the six pure tools whenever "
+    + 'the filesystem is unavailable. Got ' + JSON.stringify(host.inject))
 })
 
 console.log('')
