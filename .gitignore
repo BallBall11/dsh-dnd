@@ -1,1 +1,7 @@
-COMMIT_MSG_TMP.txt
+node_modules/
+*.log
+.DS_Store
+
+# Scratch files: temp commit messages and one-off diagnostics.
+COMMIT_MSG*.txt
+_diag.mjs
