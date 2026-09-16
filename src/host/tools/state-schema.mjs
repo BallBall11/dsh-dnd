@@ -48,9 +48,13 @@ const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
  * Fixed top-level field order. Anything absent from this list is dropped by
  * `normalizeState` rather than silently serialized, so a typo in a field name
  * surfaces as a missing value instead of an extra key nobody reads.
+ *
+ * `player`, `campaign` and `updated` are deliberately absent. They describe the
+ * file rather than the character and live in the `.md` frontmatter; keeping them
+ * here too would recreate the drift this split exists to prevent.
  */
 const TOP_LEVEL_ORDER = [
-  'schema', 'name', 'player', 'campaign', 'updated',
+  'schema', 'name',
   'identity', 'abilities', 'combat', 'saves', 'proficientSaves',
   'skills', 'attacks', 'spellcasting', 'spellSlots', 'spells',
   'equipment', 'currency', 'warnings',
@@ -98,6 +102,8 @@ const ALWAYS_PRESENT = {
   proficientSaves: () => [],
   warnings: () => [],
   combat: () => ({ hp: { current: null, max: null }, hitDice: { die: null, remaining: null }, deathSaves: { successes: 0, failures: 0 } }),
+  spellcasting: () => ({ ability: null, saveDC: null, attackBonus: null }),
+  identity: () => ({ race: null, class: null, level: null, background: null, alignment: null, xp: null, xpNext: null }),
   currency: () => ({ gp: 0, sp: 0, cp: 0 }),
 }
 
