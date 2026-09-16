@@ -26,28 +26,70 @@ async function test(name, fn) {
   }
 }
 
-/** The host fs service, backed by node's fs (read-only usage). */
+/**
+ * The host fs service, modelled on the REAL contract.
+ *
+ * The previous version of this mock accepted a path string everywhere, which
+ * is what let a genuine bug reach the profile: the real backend's `stat` and
+ * `listDir` take a FsTarget object, so `listDir('D:/.../characters')` returned
+ * an empty listing and dnd_character_get reported "No character sheets found"
+ * for a directory that contained one.
+ *
+ * This mock therefore has the same shape as the service the plugin actually
+ * talks to: `resolve` returns a target, and `stat`/`readText`/`listDir` accept
+ * ONLY a target and throw on a bare string. A test that passes a string now
+ * fails loudly instead of silently returning nothing.
+ */
+function makeTarget(displayPath) {
+  const normalized = String(displayPath).replace(/\\/g, '/')
+  return {
+    targetKey: normalized.toLowerCase(),
+    displayPath: normalized,
+    toString() { return normalized },
+  }
+}
+
+/** Assert a value looks like a FsTarget, mirroring the real service's strictness. */
+function asTarget(value, method) {
+  if (typeof value === 'string') {
+    throw new TypeError(
+      `fs.${method}() received a path string; the host contract requires an FsTarget from resolve(). `
+      + `Got "${value}". This is the exact mismatch that produced "No character sheets found".`,
+    )
+  }
+  if (value === null || typeof value !== 'object' || typeof value.displayPath !== 'string') {
+    throw new TypeError(`fs.${method}() received neither a FsTarget nor a path: ${JSON.stringify(value)}`)
+  }
+  return value.displayPath
+}
+
 const fsService = {
-  async resolve(p) { return String(p).replace(/\\/g, '/') },
-  async stat(p) {
+  async resolve(p) { return makeTarget(p) },
+  async stat(target) {
+    const display = asTarget(target, 'stat')
     try {
-      const s = await fsStat(String(p).replace(/\//g, path.sep))
+      const s = await fsStat(display.replace(/\//g, path.sep))
       return { type: s.isDirectory() ? 'directory' : 'file', size: s.size, mtime: s.mtimeMs }
     } catch { return undefined }
   },
-  async readText(p) { return readFile(String(p).replace(/\//g, path.sep), 'utf8') },
-  async listDir(p) {
-    const dir = String(p).replace(/\//g, path.sep)
+  async readText(target) {
+    const display = asTarget(target, 'readText')
+    return readFile(display.replace(/\//g, path.sep), 'utf8')
+  },
+  async listDir(target) {
+    const display = asTarget(target, 'listDir')
     const out = []
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    for (const entry of await readdir(display.replace(/\//g, path.sep), { withFileTypes: true })) {
       out.push({
         name: entry.name,
-        target: `${String(p).replace(/\/$/, '')}/${entry.name}`,
+        target: makeTarget(`${display.replace(/\/$/, '')}/${entry.name}`),
         type: entry.isDirectory() ? 'directory' : 'file',
       })
     }
     return out
   },
+  /** Not part of the fs contract; used by the late-registration test. */
+  processPathFromHostPath(hostPath) { return String(hostPath) },
 }
 
 const registered = []
