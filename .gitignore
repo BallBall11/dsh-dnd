@@ -3,5 +3,7 @@ node_modules/
 .DS_Store
 
 # Scratch files: temp commit messages and one-off diagnostics.
-COMMIT_MSG*.txt
+# COMMIT_* rather than COMMIT_MSG* — the per-step messages are named
+# COMMIT_2A.txt and slipped through the narrower pattern.
+COMMIT_*.txt
 _diag.mjs
