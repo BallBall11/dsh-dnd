@@ -1,0 +1,45 @@
+feat(state): add the structured state schema and a deterministic serializer
+
+Step 2a of stage 2: the shape of the structured half, and the guarantees that
+make it safe to write to disk.
+
+A character sheet mixes content that must not share a representation.
+Classification was done against the real template, section by section:
+
+  structured  identity, abilities, combat stats, saves, skills, attacks,
+              spell slots, spells, equipment, currency
+  narrative   character pillar, backstory, and Features & Traits — whose
+              entries are `**name** — prose`, which formatting would destroy
+
+Each field gets exactly one home, so the two files cannot drift. The failure
+that motivated this: state.md said Alice had one 1st-level slot left while
+alice.md said two, with no rule for which won, because the same fact was
+maintained by hand in two places.
+
+Two measured JavaScript behaviours are handled explicitly, both silent:
+
+  Integer-like keys are hoisted and sorted by the engine.
+    {Zombie:1, "10":x, "2":y, Alpha:2, "1":z} -> 1, 2, 10, Zombie, Alpha
+  Spell-slot levels are exactly these keys, so they are sorted numerically
+  rather than trusted to insertion order. Skill and item names are not
+  integer-like, keep the DM's ordering, and are preserved.
+
+  Duplicate keys resolve to the last with no error.
+    JSON.parse('{"Robe":1,"Robe":2}') -> {"Robe":2}
+  A hand-edited file can lose data quietly, so parseState scans for duplicates
+  and reports them, and the write path takes structured objects only.
+
+Determinism is a requirement here, not polish: the reason to split the state
+out of the narrative was a legible history, so equal input must give
+byte-identical output. Top-level and nested keys are canonicalized, unicode is
+emitted literally (CJK stays readable rather than becoming \uXXXX), NaN is
+coerced to null, and serialize->parse->serialize is asserted idempotent.
+
+Containers every consumer reads are materialized rather than omitted, so the
+panel can render an empty section without distinguishing absent from empty.
+
+26 assertions. Three failed on first run and two were real gaps — `combat.ac`
+was never coerced because it is a scalar inside an otherwise nested object, and
+bare states produced no empty containers at all. The third was my own test
+comparing lines by index, which over-reports once a line is inserted; it now
+compares line multisets, the same correction the TOML decision needed.
