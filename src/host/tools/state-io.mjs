@@ -35,7 +35,7 @@
  * campaign. Reads are pure.
  */
 
-import { splitSheet, composeSheet } from './sheet-split.mjs'
+import { splitSheet, composeSheet, dropLegacyMetadataLine } from './sheet-split.mjs'
 import { serializeState, parseState, normalizeState, SCHEMA_VERSION } from './state-schema.mjs'
 import { buildMetadata } from './clock.mjs'
 import { readTextOrUndefined, listMarkdown } from './shared.mjs'
@@ -148,7 +148,12 @@ export async function writeCharacter(fs, dir, name, options = {}) {
   })
 
   const title = options.title ?? `# ${state?.name ?? name}`
-  const sheetText = composeSheet(narrative ?? '', state ?? {}, { title, metadata })
+  // The frontmatter written below carries player/campaign/updated, so the
+  // legacy inline copy is superseded by definition. Stripping it here is what
+  // keeps the fact in one place: on read the line survives, because it may be
+  // the only copy, but on write a replacement is guaranteed.
+  const cleanNarrative = dropLegacyMetadataLine(narrative ?? '')
+  const sheetText = composeSheet(cleanNarrative, state ?? {}, { title, metadata })
   const stateText = serializeState(state ?? {})
 
   // The state file is written first: it is the authority, so if the second

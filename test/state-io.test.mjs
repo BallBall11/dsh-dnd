@@ -284,6 +284,17 @@ await test('the legacy inline metadata line is gone after migration', async () =
     'the inline copy is superseded by frontmatter and must not linger')
 })
 
+await test('the written .md does not contain the legacy line either', async () => {
+  // The read-side guard keeps the line when there is no frontmatter, because
+  // it is then the only copy. The write path creates a replacement, so it must
+  // strip the line — otherwise the same fact sits in two places in the output,
+  // which is what the whole split exists to prevent.
+  const text = readFileSync(sheetPath(dir, 'alice').replace(/\//g, path.sep), 'utf8')
+  assert.ok(!text.includes('**Last Updated:**'), 'the migrated file must not restate metadata inline')
+  assert.ok(!text.includes('**Player:**'), 'nor the player field')
+  assert.ok(text.includes('updated:'), 'the frontmatter is the one place it lives')
+})
+
 // --- the critical property ------------------------------------------------
 await test('reading a migrated character twice is stable', async () => {
   const a = await readCharacter(fs, dir, 'alice')
