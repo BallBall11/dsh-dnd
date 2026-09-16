@@ -1,297 +1,359 @@
 # dsh-dnd 重写方案：功能清单与实施计划
 
-> 状态：**规划完成，未改代码。**
+> 状态：**规划完成。阶段 0、1 已实施并真机验证。**
 > 范围：**只重写 `dsh-dnd` 插件**（Host 工具族 + Client 面板）。
 > 不改 `.agents/skills/dnd/`（那是已安装的 skill，`D:\DND\AGENTS.md` 明令不动）。
 > 前置阅读：`docs/BUNDLE-COMPAT-AUDIT.md`（三缺陷诊断，本方案是它的执行版）。
 
 ---
 
-## 0. 一句话定位
+## 0. 定位（v2 修订）
 
-`dsh-dnd` 是 D&D skill 的**原生加速层**，不是替代品：
+> **本节已重写。** 旧版把 `dsh-dnd` 定位为"dnd skill 的原生加速层"，
+> 并围绕"与 Python 脚本互斥"设计。**该前提已作废。**
 
-| 层 | 谁 | 职责 |
-|---|---|---|
-| **权威层** | `.agents/skills/dnd/scripts/*.py` | 全部持久化状态、掷骰仪式、display companion、完整规则书 |
-| **加速层** | `dsh-dnd` 插件 | 高频、只读或小写入的表上操作，省掉一次 shell 往返 |
+`dsh-dnd` 是一个**独立的 D&D 数据层**：
 
-判据很简单：**能纯函数算出来的、或者读一个 markdown 字段就能答的，归插件；需要写复杂状态、需要展示、需要联网的，归脚本。**
-
----
-
-## 1. 现状评估（为什么"另起炉灶"是对的）
-
-现有实现不是"有几个 bug"，而是**三个层面的系统性错误**：
-
-### 1.1 Client 半完全不成立（审计缺陷 A/B/C）
-
-| 缺陷 | 事实 | 证据 |
-|---|---|---|
-| A | `lib/client.js` 是普通 ESM，bundle 必须是闭包工厂 | `shared/tsdown.client.ts:376-378` |
-| B | 源码用 `React`/`styles`/`host` 三个裸全局，那是动态插件专属 | Client `Builtin.listBuiltins` |
-| C | `host.call`/`harness.handle` 强制要 `pluginId`+`pluginRunId`，bundle 没有 | `dsh-cordis-client-runner/lib/client.js:5072` |
-
-**后果**：角色面板从未工作过。底边栏那个 ⚔ 按钮不存在，不是"少了一行"。
-
-### 1.2 Host 半功能性不足
-
-10 个工具，但覆盖面窄且和脚本重复度高：
-
-- `dnd_roll` / `dnd_check` / `dnd_attack` / `dnd_save` —— 纯计算，**这部分是对的**，价值真实（省一次 `dice.py` 往返，且不必解析 stdout）
-- `dnd_srd_lookup` —— 每次调用 `JSON.parse` 整个 SRD 文件（1453 条），无缓存
-- `dnd_campaign_search` —— 命令行式全文件扫描，无索引
-- `dnd_character_get` —— 解析器只认一种固定 markdown 排版，`spellSlots` 只抓第一个 `Nst` 行（多环阶法师直接丢数据）
-- `dnd_xp_add` / `dnd_track` —— 直接改角色文件，**与 `xp.py` / `tracker.py` 争抢写入权**，是数据损坏来源
-
-### 1.3 工程形态与参照仓库脱节
-
-| 维度 | 现状 | 参照（`dsh-task-board`） |
-|---|---|---|
-| patch 行名 | `./lib/host/index.mjs` | 裸包名 `@linxin666/...` |
-| 构建 | 手写 `copyFile`，无打包 | `tsdown` + `clientBundle()` 预设 |
-| `dsh.client.inject` | `["slots"]`（服务名，错） | 包名数组 |
-| 跨端 | `host.call`（不可用） | `webServer` 路由 + `fetch` |
-| 测试 | 3 个手写脚本 | vitest 全套 |
-
-**结论**：与其修，不如按参照仓库的正确形态重写。Host 的**纯计算工具逻辑可以保留**（那部分没问题），其余推倒。
-
----
-
-## 2. 功能清单
-
-按"归插件 / 归脚本"分组。★ = 新建，◆ = 重写，○ = 保留。
-
-### 2.1 Host 工具（模型可调用）
-
-#### A. 掷骰与判定 — 纯计算，零 IO ★核心价值
-
-| 工具 | 说明 | 备注 |
-|---|---|---|
-| `dnd_roll` ○ | `NdM±X`，优势/劣势，`silent` | 逻辑已对，补 `kh/kl`（`4d6kh3`） |
-| `dnd_check` ○ | d20+mod vs DC，nat20/nat1 | 已对 |
-| `dnd_attack` ○ | 攻击 vs AC，暴击双骰 | 已对 |
-| `dnd_save` ○ | 豁免 vs DC | 已对 |
-| `dnd_mastery` ★ | 2024 武器精通 8 种特性查表 | 纯静态表，`combat.py mastery` 的原生版 |
-| `dnd_dc` ★ | 技能→DC 常用档位、被动检定计算 | 表上高频，纯函数 |
-
-#### B. 战役数据读取 — 只读，带缓存
-
-| 工具 | 说明 | 备注 |
-|---|---|---|
-| `dnd_campaign_state` ○ | `state.md` 关键 section | 已对，补 section 列表 |
-| `dnd_character_get` ◆ | 角色卡解析 | **重写解析器**，见 2.5 |
-| `dnd_campaign_search` ◆ | 语料检索 | 加**进程内索引缓存**（mtime 失效） |
-| `dnd_srd_lookup` ◆ | SRD 查询 | 加**按 ruleset 的模块级缓存**（现每次 parse 全文件） |
-| `dnd_graph_context` ★ | 读 `graph.json`，场景子图 | `/dm:dnd graph scene-context` 的原生版 |
-| `dnd_recap` ★ | 读 `.recap/*.json` 做状态 diff | `session_recap.py diff --json` 的只读镜像 |
-| `dnd_arc_status` ★ | 读 `## Campaign Arc` 当前拍点 | 高频、结构固定 |
-
-#### C. 小写入 — 必须与脚本互斥
-
-| 工具 | 说明 | 风险控制 |
-|---|---|---|
-| `dnd_track` ◆ | HP/临时/激励/死亡豁免 | **加文件锁 + 写前重读**，见 2.6 |
-| `dnd_xp_add` ◆ | CR→XP 写入 | 同上 |
-
-> **决策点**：这两个工具与 `tracker.py` / `xp.py` 写同一批文件。方案见 §2.6。
-
-#### D. 明确**不做**的（留给脚本）
-
-`calendar.py`（世界时钟）、`oracle.py`、`import_campaign.py`、`sync_srd.py`、
-`npc_rename.py`、`name_registry.py`、`corpus_check.py`、`display/*`（全部）。
-
-理由：要么需要复杂状态机，要么需要网络，要么是低频一次性操作——插件化收益 < 维护成本。
-
-### 2.2 Client 面板（可扩展注册表）
-
-**保留注册表结构**（你要求的"后续可能添加其他面板"），首版只装角色面板。
-
-| 面板 | 状态 | 数据源 |
-|---|---|---|
-| 角色面板 | v0.2.0 | `GET /dnd/characters` |
-| 战役面板 | v0.3.0 预留 | `GET /dnd/situation` |
-| 骰池/日志 | 暂不做 | —— |
-
-**挂载点**（已核对 DSH 真实契约）：
-
-| 槽 | 用途 | 契约 |
-|---|---|---|
-| `sidebar.footer.action` | ⚔ 角色 开关 | `kind: 'list'`，owner props `{ wide: boolean }` |
-| `shell.overlay` | 浮动面板 | `kind: 'list'`，**点击穿透**，occupant 需自己开 `pointer-events` |
-
-出处：`dsh-client-ui-sidebar/lib/types/client/contract/slots.d.ts:69-73`、
-`dsh-client-ui-layout/lib/types/client/index.d.ts:80-83`。
-
-**明确不做**：皮肤/theme token 覆盖（你已要求去掉）。
-
-### 2.3 跨端通道
-
-```
-Host:  ctx.webServer.register({ kind:'exact', path:'/dnd/characters', handler })
-Client: fetch('/dnd/characters', { cache:'no-store' })
-```
-
-一条 `GET`，纯只读，无需 SSE。将来若要推送（战斗回合变化）再加 `EventSource`。
-
-契约出处：`dsh-host-webserver/lib/types/index.d.ts:33-39`。
-
-### 2.4 构建与打包形态
-
-| 项 | 目标 |
+| 层 | 职责 |
 |---|---|
-| patch 行 | `id: dnd` / `name: dsh-dnd`（裸包名） |
-| `exports["."]` | `./lib/host/index.mjs`（node 半） |
-| `exports["./client"]` | `./lib/client.js`（闭包工厂） |
-| `dsh.bundle.patch` | `./cordis.patch.yml` |
-| `dsh.client.inject` | **依赖包名**（非服务名） |
-| 构建 | 手写 `build.mjs` 产出 banner/footer/intro 包裹（不引入 tsdown，保持无 TS） |
+| **状态层**（新增） | 角色卡的**结构化状态**——内存对象 + JSON 文件，插件的权威领域 |
+| **叙事层** | 角色卡的自由文本（自我描述、旅程经历、特性描述），人可编辑 |
+| **表现层** | Client 面板、摘要工具 |
 
-产出形态（严格对齐 `shared/tsdown.client.ts:376-378`）：
+**与 `.agents/skills/dnd/` 的关系**：**仅供参考，不再调用**。技能文档的价值在于它记录了
+**数据格式的权威定义**（模板排版、字段语义），这些定义我们**沿用**；但插件不调用其脚本、
+不与其争抢写入权、不需要互斥。
 
-```js
-window.__ModuleLoader__.load({ id: "dsh-dnd", factory: (require) => {
-var module = { exports: {} }; var exports = module.exports;
-/* module body */
-return module.exports; } });
-```
-
-### 2.5 角色卡解析器重写（v0.2.0 重点）
-
-现有 `parseCharacterSheet` 的问题：
-
-1. `spellSlots` 只用 `/^\|\s*(\d+)st\s*\|/` 抓**一行** → 多环阶角色丢数据
-2. `abilityScores` 只认 `| STR | DEX | ...` 单表头
-3. 无 HP/AC 缺失时的容错，静默返回 `null`
-4. 无 schema 版本，格式演进无法判断
-
-目标：改为**按 section 分块 + 每块多策略**，返回 `{ version, warnings[], ...}`，
-并在面板上显示 warnings（而不是静默错）。
-
-### 2.6 写入互斥（必须解决）
-
-`dnd_track` 和 `tracker.py` 会写同一批 `.md` 文件。方案：
-
-- **读-改-写加锁**：进程内 per-file mutex
-- **写前重读**：拿到锁后重新读，不用陈旧文本（现有实现用 `readText` 的快照改，有丢更新窗口）
-- **幂等校验**：写后重读确认目标字段已变
-- **可选**：写前比对 mtime，若在锁等待期间被外部改过，放弃并要求重试
+**这意味着旧版 §2.6「写入互斥」整节作废**——没有第二个写入者了。
 
 ---
 
-## 3. 实施计划
+## 1. 两条已确立的设计原则
 
-四个阶段，每阶段**独立可验收**，失败不阻塞后续。
+### 1.1 叙事与状态必须分离
 
-### 阶段 0 —— 骨架与契约验证（不写业务逻辑）
+模板（`templates/character-sheet.md`）的内容按**能否无歧义结构化**分类：
 
-**目标**：先证明"能装、能启动、能被浏览器加载"，再写功能。
+| 分类 | 区块 | 归属 |
+|---|---|---|
+| **结构化状态** | Identity、Ability Scores、Combat Stats、Saving Throws、Skills、Attacks、Spell Slots、Spells、Equipment、Currency | `characters/<name>.state.json` |
+| **叙事文本** | Character Pillar、Backstory & Notes、**Features & Traits** | `characters/<name>.md` |
 
-1. 新建目录结构（保留 git 历史，`git mv` 而非新建仓库）：
-   ```
-   src/host/index.mjs        coordinator（单行入口）
-   src/host/tools/*.mjs      每个 domain 一个
-   src/host/routes.mjs       webServer 路由
-   src/client/index.js       client 入口（闭包工厂形态）
-   src/client/panels/*.js    面板注册表
-   ```
-2. `scripts/build.mjs` 改为产出 banner/footer/intro 包裹
-3. `package.json` / `cordis.patch.yml` 改为参照形态
-4. **Client 只放一个最小面板**：一个按钮 + 一个显示 `Hello` 的 overlay
+分类依据（已与需求方确认）：
 
-**验收**（唯一有效验证 = 真机）：
-- `dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle`
-- 启动 → 页面无 `__ModuleLoader__` 报错
-- `Slots.listSubTree` 查 `sidebar.footer.action` occupant **包含 `dnd-*`**
-- 点按钮，overlay 出现
+- **法术列表 → 结构化**。法术名是明确的，且能查 SRD 校验。
+- **装备背包 → 结构化**。杂物件（"根据常识和当前情形可以拥有但不必列出"）**由大模型按上下文判断**，
+  不写入文件，也不做枚举约束。
+- **Features & Traits → 纯文本**。每条是 `**名称** — 一段散文`，格式化会毁掉它。
 
-> 这一步是硬门槛。**在它通过前不写任何业务逻辑**——上次的失败就是先写了一堆功能再发现加载不了。
+**每个字段只有一个归属，零重复，零漂移。**
 
-### 阶段 1 —— Host 只读工具族
+### 1.2 文件格式选 JSON（附完整论证与更正记录）
 
-1. 迁移纯计算工具（`dnd_roll`/`check`/`attack`/`save`），逻辑照搬（已验证正确）
-2. 新增 `dnd_mastery` / `dnd_dc`
-3. 重写 `dnd_srd_lookup`（加缓存）、`dnd_campaign_search`（加索引）
-4. 重写 `parseCharacterSheet`（§2.5）
-5. 新增 `dnd_graph_context` / `dnd_recap` / `dnd_arc_status`
+**决策：`characters/<name>.state.json`，JSON pretty（2 空格缩进）。**
 
-**验收**：`node test/coordinator-check.mjs` 工具数正确 + 每个工具有单测。
-**重点**：`parseCharacterSheet` 对新旧两种排版都要过。
+选型经过一次**结论反转**，记录如下以免重蹈：
+
+| 轮次 | 主张 | 依据 | 结果 |
+|---|---|---|---|
+| 1 | JSON 的列表 diff 很差 | 逐行按索引比较，得"54 行变更" | ❌ **测量方法错误** |
+| 2 | 改用 TOML | 基于 (1) 的错误数据 | ❌ 前提不成立 |
+| 3 | **JSON** | **真实 `git diff` 实测** | ✅ **当前决策** |
+
+**错误根源**：第 1 轮用的是 `lines[i] !== lines2[i]` 的逐行索引对比，它把**因插入而位移的行**
+全部计为"变更"。**git 用的是 Myers diff**，会正确识别插入并对齐后续行。
+
+**实测证据**（真实 git 仓库，非模拟）：
+
+```
+在 JSON 数组中插入一个法术：
+  git diff --numstat  ->  1  0      (纯新增，零删除)
+  +    "New Spell",
+
+同样内容写成 TOML 单行数组：
+  git diff --numstat  ->  1  1      (整行替换)
+  -prepared = ["Mage Armor", "Magic Missile", ...]
+  +prepared = ["Mage Armor", "New Spell", "Magic Missile", ...]
+```
+
+**JSON 的 diff 实际优于 TOML**（`+1 -0` vs `+1 -1`）。
+
+最终对比：
+
+| 维度 | JSON pretty | TOML |
+|---|---|---|
+| 标量改动 | ✅ 1 行 | ✅ 1 行 |
+| **列表插入** | ✅ **`+1 -0`** | ✅ `+1 -1` |
+| 字典（物品:数量）| ✅ 1 行 | ✅ 1 行 |
+| 体积 | 984 字符 | 489 字符 |
+| **解析器** | ✅ **`JSON.parse` 内置** | ❌ 需手写 ~100 行 |
+
+**决定性理由**：diff 友好度 JSON 更优或持平；TOML 仅剩体积优势，**不足以抵偿手写解析器的
+维护成本与规范边界风险**（Node 24 无内置 TOML 解析器，profile 内也无相关依赖）。
+
+---
+
+## 2. JSON schema（v1）
+
+```jsonc
+{
+  "schema": 1,                       // 版本号，格式演进用
+  "name": "Alice",
+  "player": null,
+  "campaign": "morgansfort",
+  "updated": "2026-09-04",
+
+  "identity": {
+    "race": "High Elf (Elf)", "class": "Wizard", "level": 1,
+    "background": "Sage", "alignment": null,
+    "xp": 0, "xpNext": 300
+  },
+
+  "abilities": { "STR": 8, "DEX": 14, "CON": 15, "INT": 17, "WIS": 10, "CHA": 10 },
+
+  "combat": {
+    "hp": { "current": 8, "max": 8 }, "tempHp": 0,
+    "ac": 12, "mageArmorAc": 15,
+    "initiative": 2, "speed": 30,
+    "hitDice": { "die": "d6", "remaining": 1 },
+    "deathSaves": { "successes": 0, "failures": 0 }
+  },
+
+  "saves": { "STR": -1, "DEX": 2, "CON": 2, "INT": 5, "WIS": 2, "CHA": 0 },
+  "proficientSaves": ["INT", "WIS"],
+
+  "skills": {
+    "Arcana":     { "ability": "INT", "bonus": 5, "proficient": true },
+    "Stealth":    { "ability": "DEX", "bonus": 2, "proficient": false }
+  },
+
+  "attacks": [
+    { "name": "电爪 Shocking Grasp", "bonus": 5, "damage": "1d8", "type": "Lightning" }
+  ],
+
+  "spellcasting": { "ability": "INT", "saveDC": 13, "attackBonus": 5 },
+
+  // 法术位：整数键。注意读取时会被 JS 引擎提升排序，写入时须显式排序（见 §4.2）
+  "spellSlots": { "1": { "total": 2, "used": 0 } },
+
+  "spells": {
+    "cantrips":  ["Light", "Mage Hand", "电爪 Shocking Grasp"],
+    "spellbook": ["Detect Magic", "Mage Armor"],
+    "prepared":  ["Mage Armor", "Sleep"]
+  },
+
+  // 装备：字典形式 name -> 数量。数量为 1 时仍显式写出，保持 diff 稳定
+  "equipment": {
+    "weapons": { "Quarterstaff": 1, "Dagger": 1 },
+    "armour":  {},
+    "gear":    { "Spellbook": 1, "Parchment": 8 }
+  },
+
+  "currency": { "gp": 8, "sp": 0, "cp": 0 },
+  "warnings": []                     // 解析期问题，绝不静默吞掉
+}
+```
+
+**装备用字典 `name -> qty`**（已确认）：
+- 改数量 = 改一行（`"Parchment": 8` → `7`），实测 `git diff --numstat` = `1 1`
+- 增删物品 = 增删一行
+- 比 `["Parchment x8"]` 更结构化，比 `[{name,qty}]` 体积小且 diff 干净
+
+---
+
+## 3. 文件布局
+
+```
+campaigns/<campaign>/
+  characters/
+    alice.md          叙事层：Pillar、Backstory、Features & Traits
+    alice.state.json  状态层：六维/HP/AC/技能/攻击/法术位/法术/装备/货币
+```
+
+`alice.md` 顶部保留一个**由插件生成的只读摘要块**，供人一眼看全：
+
+```markdown
+# Alice
+<!-- dsh-dnd:generated — 数值请改 alice.state.json，本块会被覆盖 -->
+> HP 8/8 · AC 12 (Mage Armor 15) · Init +2 · Speed 30
+> STR 8 (-1) · DEX 14 (+2) · CON 15 (+2) · INT 17 (+3) · WIS 10 (+0) · CHA 10 (+0)
+> 法术位 1环 1/2 · 法术DC 13 · 法术攻击 +5
+> 💰 8 gp 0 sp 0 cp
+
+## Character Pillar
+...
+```
+
+**写入策略**：
+- `.state.json` — **整文件重写**，字段顺序由序列化器固定（§4.2），diff 稳定
+- `.md` — **只替换摘要块**（由 `<!-- dsh-dnd:generated -->` 标记界定），正文一字不动
+
+---
+
+## 4. 实施要点
+
+### 4.1 序列化器必须保证确定性
+
+`JSON.stringify` 不能直接用——必须**归一化字段顺序**，否则每次写出的键序可能不同，产生假 diff。
+
+- 顶层与各段字段**按固定顺序**输出（schema 中的书写顺序）
+- `skills` / `equipment` 的键按**插入顺序**保留（物品顺序是 DM 的语义信息）
+- 空容器统一输出为 `{}` / `[]`，不省略
+
+### 4.2 整数键陷阱（实测确认）
+
+JS 对象会把**整数样式的键提升到前面并升序排列**：
+
+```
+{ Zombie:1, "10":x, "2":y, Alpha:2, "1":z }
+  ->  1, 2, 10, Zombie, Alpha
+```
+
+`spellSlots` 的键是 `"1"`、`"2"`……**正好命中这条规则**。影响：
+
+- 读取时**无需担心**——环阶本来就该升序
+- 写入时**必须显式排序**，否则 10 环（不存在）与 2 环的次序在跨引擎时可能不一致
+- **物品名不会命中**（非纯数字），保持插入顺序，符合预期
+
+### 4.3 重复键（实测确认）
+
+`JSON.parse('{"Robe":1,"Robe":2}')` → `{"Robe":2}`，**后者胜出，不报错**。
+
+手改 JSON 若写重键会**静默丢数据**。因此：
+- `.state.json` 的写路径**不接受**外部提供的原始 JSON 文本，只接受结构化对象
+- 解析失败或出现异常时记入 `warnings[]`，面板显式显示
+
+---
+
+## 5. 现状：阶段 0/1 已完成
+
+### 阶段 0 —— 加载链路（✅ 已完成，真机验证）
+
+产出 **闭包工厂**形态的 `lib/client.js`，替换 v0.1.0 的裸 ESM（缺陷 A）。
+
+- `scripts/build.mjs` 产出 `banner` / `intro` / `footer` 包裹，并**内置构建闸门**拒绝 ESM 语法
+- `scripts/verify-client.mjs` 用 stub loader **真实求值** `lib/client.js`
+- 真机确认：`sidebar.footer.action` 与 `shell.overlay` 均有 occupant，按钮可见可开
+
+### 阶段 1 —— Host 只读工具族（✅ 已完成，11 个工具真机验证）
+
+| 族 | 工具 |
+|---|---|
+| `tools/roll.mjs` | `dnd_roll` `dnd_check` `dnd_attack` `dnd_save` `dnd_mastery` `dnd_dc` |
+| `tools/lookup.mjs` | `dnd_srd_lookup` |
+| `tools/campaign.mjs` | `dnd_campaign_state` `dnd_campaign_search` `dnd_arc_status` |
+| `tools/sheet.mjs` | `dnd_character_get` |
+
+**依赖形态**：`inject: ['tools']`（唯一硬依赖）；`fs` **软依赖**，5/11 工具需要，
+惰性读取以便晚注册的 fs 也能用；`logger` 软依赖。
+
+**真机抓出的 3 个 bug**（全部由重启实测发现，无一为读代码所得）：
+
+| # | Bug | 为何测试漏掉 |
+|---|---|---|
+| 1 | BOM 致"无活跃战役" | 手写 fixture 不含 BOM |
+| 2 | 挂载时缓存 `fs` | mock 的 fs 永远就绪 |
+| 3 | 传路径而非 `FsTarget` | **mock 比真实实现宽松** |
+
+**第 3 个的教训最重**：mock 接受字符串，于是它验证的是"代码怎么调"而非"服务怎么定义"。
+**比真实实现宽松的 mock 不可能失败。** 已重建为严格形态（传字符串即抛 `TypeError`）。
+
+**另一处自我更正**：曾把"解析器只认 `| Slot |`"当作 v0.1.0 的缺陷。
+查证后：模板（`templates/character-sheet.md:67`）与 `session_recap.py:153` 都明确写
+**`| Level | Total | Used |`**，`alice.md` 完全正确。`Slot` 是**我自己凭空假设的表头**，
+是我在重写时**新引入**的 bug，比原缺陷更严重（原来是少显示，我的是完全不显示）。
+**根因：照想象写，而非照权威来源写。**
+
+---
+
+## 6. 后续阶段
 
 ### 阶段 2 —— 跨端通道 + 角色面板
 
-1. `src/host/routes.mjs`：`GET /dnd/characters` 返回
-   `{ campaign, situation, characters[], warnings[] }`
-2. 路由注册用 `ctx.inject(['webServer'], ...)` + `ctx.effect()` 归属 fiber
-3. Client 用 `fetch`，去掉所有 `host.call`
-4. 面板渲染：HP 条 / 六维 / 技能 / 攻击 / 法术位 / warnings
+1. **拆分状态与叙事**：新增 `src/host/tools/state-io.mjs`
+   - `readState(fs, dir, name)` → 解析 `.state.json`（不存在则从 `.md` 迁移，见下）
+   - `writeState(fs, dir, name, state)` → 确定性序列化 + 原子替换
+   - **迁移路径**：首次遇到只有 `.md` 的角色时，解析其结构化区块生成 `.state.json`，
+     并把 `.md` 中的结构化区块替换为摘要块。**迁移前备份原文件**
+2. **摘要工具**：`formatCharacter` 已有，扩展为从状态对象生成（实测 1055 → ~120 token，降 88%）
+3. **`src/host/routes.mjs`**：`ctx.inject(['webServer'], ...)` + `ctx.effect()` 注册
+   `GET /dnd/characters`（`webServer.register({kind:'exact', path, handler})`）
+4. **Client 改用 `fetch`**，移除所有 `host.call`（缺陷 C —— bundle 无 `pluginId`/`pluginRunId`）
+5. **真实面板**：HP 条 / 六维 / 技能 / 攻击 / 法术位 / `warnings[]`
+6. **补工具参数校验**（真机测试中误传参数暴露：缺 `query` 时执行成搜索 `"undefined"`）
 
-**验收**：面板显示 morgansfort 的 alice 真实数据（HP 8/8, AC 12, INT 16, 法术位 1 环）。
+**验收**：面板显示 morgansfort 的 Alice 真实数据（HP 8/8, AC 12, INT 17 (+3), 法术位 1环 0/2）。
 
-### 阶段 3 —— 小写入 + 发布
+### 阶段 3 —— 写入 + 发布
 
-1. `dnd_track` / `dnd_xp_add` 按 §2.6 加锁重写
-2. 与 `tracker.py` / `xp.py` 的互斥做回归测试
-3. `npm run build` → 提交 → `v0.2.0`
-4. README 更新安装指令
+1. `dnd_track` / `dnd_xp_add` 写入 `.state.json`（**无互斥需求**——没有第二个写入者）
+2. 定点更新 `.md` 的摘要块，正文不动
+3. `v0.2.0` 打 tag，README 补安装指令（`dsh plugin --profile web add ...`）
+4. `package.json` 版本号改为合法 semver（当前 `0.2.0-stage0` 不可发布）
 
-**验收**：E2E 在 `host-test` 上跑通，真实 `morgansfort/alice.md` 保持不动。
+**验收**：全部写入测试在 throwaway 战役；**真实 `morgansfort/alice.md` 保持不动**。
 
 ---
 
-## 4. 验收标准（每阶段都要满足）
+## 7. 验收标准
 
 **通用**：
 - [ ] 页面无 `__ModuleLoader__` / `Invalid effect` 报错
 - [ ] `Slots.listSubTree` 能看到 dsh-dnd 的 occupant
 - [ ] `apply` 返回函数/nullish/可迭代，**绝不返回裸对象**
-- [ ] 无 `import()`、无 `process`/`Buffer`/`fs` 裸全局（Host 用 `ctx.get('fs')`）
+- [ ] 无 `import()`、无 `process`/`Buffer` 裸全局
 
 **验证方法（重要）**：
-> **动态 Cordis 插件无法验证 bundle。** 两者是不同契约（见审计 §6）。
-> 唯一有效验证 = **真实安装 → 启动 → 查槽位 occupant + 面板数据**。
+> **动态 Cordis 插件无法验证 bundle**（不同契约）。
+> 唯一有效验证 = **真实安装 → 重启 → 查槽位 occupant + 面板数据**。
+
+**新增（本次修订）**：
+- [ ] `.state.json` 序列化**确定性**：同一对象两次序列化字节相同
+- [ ] 序列化→解析→序列化 **幂等**
+- [ ] 中文物品名/法术名 round-trip 无损
+- [ ] `.md` 摘要块外的正文**写入前后字节相同**
 
 ---
 
-## 5. 风险与对策
+## 8. 风险与对策
 
 | 风险 | 对策 |
 |---|---|
-| Client 再次加载失败 | 阶段 0 先过关再往下；对照 `tsdown.client.ts:376-378` 逐字比对产出 |
-| 面板显示错数据 | 解析器加 `warnings[]`，面板显式显示而非静默 |
-| 写入丢更新 | §2.6 加锁 + 写前重读 |
-| 与脚本行为不一致 | 脚本仍是权威；插件是加速层，不一致时以脚本为准并在警告中提示 |
-| 破坏真实战役数据 | 全部测试在 `host-test`；`morgansfort/alice.md` 只读 |
-| profile 装不上 | `link:` 模式先验证；发布走 registry 需要 `npm publish` |
+| Client 再次加载失败 | 阶段 0 已过关；构建闸门 + headless verify 持续守卫 |
+| 面板显示错数据 | `warnings[]` 显式显示，绝不静默 |
+| 破坏真实战役数据 | 全部写入测试在 throwaway 战役；`morgansfort/alice.md` 只读 |
+| **迁移损坏旧角色卡** | 迁移前备份；先解析成功再改写 |
+| 序列化不确定致假 diff | §4.1 归一化字段顺序 + 幂等测试 |
+| 手改 JSON 写重键丢数据 | §4.3 写路径只接受结构化对象 |
 
 ---
 
-## 6. git 策略
-
-当前状态：HEAD = `7be8adc`（`v0.1.0`，**带 bug**），工作区有 5 个 M + 4 个 ??。
+## 9. git 策略
 
 ```
-v0.1.0  7be8adc  当前 HEAD，Client 加载失败
-   ↓  本次重写
-v0.2.0           阶段 0-2 完成（Client 可用 + 只读工具 + 面板）
-v0.3.0           阶段 3 完成（小写入 + 发布）
+v0.1.0   7be8adc  Client 加载失败（原始缺陷）
+阶段 0   7ce6dc8  闭包工厂 + 构建闸门
+阶段 1   12febba  11 个只读工具
+         a8bc7df  fs 依赖修复（后被 0ca5136 修正）
+         0ca5136  仅 tools 硬依赖
+         0d6f72e  FsTarget 契约修复
+v0.2.0           阶段 2 完成（状态层 + 跨端 + 面板）
+v0.3.0           阶段 3 完成（写入 + 发布）
 ```
 
-- 阶段 0 完成 → 提交（**不打包**，只证明能加载）
-- 阶段 2 完成 → 打 `v0.2.0`
-- 阶段 3 完成 → 打 `v0.3.0`
-- `lib/` 继续入库（`link:` 安装需要，免构建）
+`lib/` 继续入库——`link:` 安装需要，免构建。
 
 ---
 
-## 7. 待你确认
+## 10. 已确认决策记录
 
-1. **§2.1C 的写入工具**：`dnd_track` / `dnd_xp_add` 要不要保留？
-   - 保留 = 表上更快，但需处理与 `tracker.py` / `xp.py` 的互斥
-   - 去掉 = 零风险，但每次改 HP 都要走一次 shell
-   - **我的建议：保留，按 §2.6 加锁。**
-
-2. **构建方式**：继续手写 `build.mjs`（零依赖），还是引入 `tsdown`（对齐参照仓库，但要加 TS 工具链）？
-   - **我的建议：手写。** 代码是纯 JS，没有 TS/JSX/CSS Modules，`tsdown` 的价值都在我们不需要的地方。
-
-3. **阶段 0 的门槛**：同意"加载不通过就不写业务逻辑"吗？
+| 问题 | 决策 |
+|---|---|
+| 叙事/状态划分 | ✅ 分离为 `.md` + `.state.json` |
+| 文件格式 | ✅ **JSON pretty**（TOML 因需手写解析器而否决）|
+| 法术列表 | ✅ 结构化 |
+| 装备背包 | ✅ 结构化，**字典 `name -> qty`**；杂物件由大模型按上下文判断 |
+| Features & Traits | ✅ 纯文本，留在 `.md` |
+| 装备数量表达 | ✅ 字典键值对（非 `"Parchment x8"`）|
+| 与 skill 的关系 | ✅ **仅供参考，不再调用** |
+| 写入互斥 | ✅ **不需要**（无第二写入者）|
