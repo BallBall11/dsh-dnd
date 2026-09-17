@@ -223,6 +223,22 @@ export function buildTools(ctx) {
     },
     output: { schema: { type: 'string' }, render: renderText },
     async execute(args) {
+      // Checked before anything is located or read. Every field is optional
+      // (a call may change only HP), so there is no `required` entry to rely
+      // on — and an earlier version fell through to the write path, stamping
+      // both clocks on a character it had not changed. A call that names no
+      // change must not touch the disk.
+      const CHANGE_FIELDS = ['hp', 'tempHp', 'spellSlots', 'xp', 'conditions', 'removeConditions', 'resource']
+      const named = CHANGE_FIELDS.filter((f) => args[f] !== undefined && String(args[f]).trim() !== '')
+      if (named.length === 0) {
+        return 'dnd_track needs at least one of: hp, tempHp, spellSlots, xp, conditions, removeConditions, resource. '
+          + 'Nothing was written.'
+      }
+      if (named.includes('resource') && (args.resourceDelta === undefined || String(args.resourceDelta).trim() === '')) {
+        return 'dnd_track: `resource` needs a `resourceDelta`, e.g. resource "Rations" with resourceDelta "-1". '
+          + 'Nothing was written.'
+      }
+
       const fs = getFs()
       if (fs === undefined) return 'fs service unavailable'
 
@@ -504,9 +520,9 @@ export function applyTrackChanges(state, args, changes) {
   }
 
   if (args.resource !== undefined && String(args.resource).trim() !== '') {
-    if (args.resourceDelta === undefined || String(args.resourceDelta).trim() === '') {
-      return { refuse: 'dnd_track: `resource` needs a `resourceDelta`, e.g. resource "Rations" with resourceDelta "-1". Nothing was written.' }
-    }
+    // The `resourceDelta` presence check lives in dnd_track.execute, which
+    // refuses before anything is read. This is the backstop for a direct
+    // caller of this function.
     const delta = parseSigned(args.resourceDelta)
     if (delta === null) {
       return { refuse: `dnd_track could not read resourceDelta "${args.resourceDelta}". Nothing was written.` }
@@ -529,6 +545,10 @@ export function applyTrackChanges(state, args, changes) {
   }
 
   if (touched.length === 0) {
+    // Unreachable through dnd_track.execute, which refuses an empty call
+    // before reading anything. Kept as the backstop for a direct caller of
+    // this function: silently returning "no changes" and letting the write
+    // proceed would stamp both clocks on a character nothing happened to.
     changes.push('Nothing to change: pass at least one of hp, tempHp, spellSlots, xp, conditions, resource.')
   }
   return undefined

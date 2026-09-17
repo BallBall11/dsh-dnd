@@ -136,6 +136,16 @@ export function buildTools(ctx) {
     },
     output: { schema: { type: 'string' }, render: renderText },
     async execute(args) {
+      // Validated BEFORE anything is loaded. `String(undefined)` is the string
+      // "undefined" — non-empty, so the old emptiness check passed and the tool
+      // searched the SRD for a word that does not exist, reporting "No SRD
+      // entry matches \"undefined\"". That reads like a legitimate miss rather
+      // than a missing argument, which is what made it survive so long.
+      if (args.query === undefined || args.query === null || String(args.query).trim() === '') {
+        return 'dnd_srd_lookup needs a `query`, e.g. "fireball" or "goblin". '
+          + 'Nothing was searched.'
+      }
+
       const fs = getFs()
       if (fs === undefined) return 'fs service unavailable'
       const ruleset = args.ruleset ?? await detectRuleset(fs)
@@ -145,7 +155,6 @@ export function buildTools(ctx) {
       if (data === null || typeof data !== 'object') return `SRD dataset for ${ruleset} is not an object.`
 
       const query = String(args.query).toLowerCase().trim()
-      if (query === '') return '`query` must not be empty.'
       const max = Number(args.max) > 0 ? Number(args.max) : 5
 
       const wantedKey = args.category !== undefined ? CATEGORY_KEYS[String(args.category).toLowerCase()] : undefined
