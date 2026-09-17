@@ -1,6 +1,6 @@
 # dsh-dnd 重写方案：功能清单与实施计划
 
-> 状态：**阶段 0、1、2 已实施并实测通过。阶段 3（跨端 + 面板 + 写入工具）待做。**
+> 状态：**阶段 0、1、2、3 已实施并实测通过。阶段 4（发布）待做。**
 > 范围：**只重写 `dsh-dnd` 插件**（Host 工具族 + Client 面板）。
 > 不改 `.agents/skills/dnd/`（那是已安装的 skill，`D:\DND\AGENTS.md` 明令不动）。
 > 前置阅读：`docs/BUNDLE-COMPAT-AUDIT.md`（三缺陷诊断，本方案是它的执行版）。
@@ -372,6 +372,64 @@ characters/alice.md           frontmatter + 摘要块 + 叙事（人维护）
 
 ---
 
+### 阶段 3 实施结果（已完成）
+
+**3a–3e 全部实施并通过 `npm run check`**（11 个单元/契约套件 + 无头 Client 校验
++ 写入工具场景脚本）。
+
+#### 交付物
+
+| 文件 | 作用 |
+|---|---|
+| `src/host/routes.mjs` | `GET /dnd/characters`、`GET /dnd/health` |
+| `src/client/panels/character.js` | 真实角色面板（替换 smoke） |
+| `src/host/tools/track.mjs` | `dnd_track` / `dnd_spend` / `dnd_xp_add` |
+| `scripts/verify-client.mjs` | 无头跑 client.js：注册 + 渲染整棵树 |
+| `scripts/write-tools-scenario.mjs` | 走真实 `execute()` 的写入验收 |
+| `test/tool-args.test.mjs` | 空参数行为审计，16 个工具全覆盖 |
+
+工具总数 11 → **14**。
+
+#### 阶段 3 抓出的 bug（6 个）
+
+| # | Bug | 后果 | 为何测试漏掉 |
+|---|---|---|---|
+| 9 | `ctx.get('webServer')` + 外层 `ctx.effect` | 路由**静默不注册**，404 空 body | `register()` 返回 disposer 且报成功 |
+| 10 | 新字段未列入 `TOP_LEVEL_ORDER` | `conditions` / `appliedKeys` **写入即丢失**，幂等失效 | 归一化静默丢字段，工具报告成功 |
+| 11 | `conditions` 不在 `ALWAYS_PRESENT` | 面板读 `.length` 抛错 | 未测「从未中状态」的角色 |
+| 12 | 法术位符号取反 | `used` **朝反方向变**，且看着合理 | **测试写的是同样的错**，会锁死 bug |
+| 13 | `String(undefined)` 当数据（3e） | 搜索 `"undefined"`，像一次正常未命中 | 空串检查拦不住非空串 |
+| 14 | `dnd_track` 空参数仍写入 | 未改变任何值却刷新双时钟 | 无 `required` 可依赖（字段本就全可选） |
+
+**第 9 个的教训**：`register()` 成功 ≠ 路由生效。**失败是无声的**，
+所以 `mountRoutes` 现在**抛异常**并在消息里写明修法。
+
+**第 12 个的教训**：**测试和被测代码犯了同一个错**，于是测试通过、bug 留存。
+写入类断言必须独立于实现推导期望值。
+
+**第 14 个的教训**：`required` 是给模型的**提示，不是强制**。工具必须自查参数；
+但更根本的是「**什么都没改就不该落盘**」——这才是该断言的性质。
+
+#### 关于 mock 的第三次教训
+
+`verify-client.mjs` 的 React stub 一开始返回**死 setter、吞掉 effect**，
+于是「展开态渲染」检查是**空的**：数据 effect 从未运行，body 停在 `idle`，
+`Body` 返回 `null`，角色子树**从未被构建**。
+
+**不能失败的 mock 不可能验证。** 重建后 stub 会跑 hook、跨渲染保留 state、
+walk 整棵元素树，并**用变异测试证明它真的会失败**。
+
+#### 验收方式的一贯原则
+
+- **拒绝类断言比对文件哈希**，不比对重读值——「文件不该变」是关于**字节**的断言，
+  用同一个解析器重读只会自我印证
+- **写入测试全部在 `campaigns/stage2-test`**；活动战役标记在 `finally` 中还原，
+  且**按字节读写**（`readFileSync(_, 'utf8')` 会吞掉 BOM）
+- 真实 `morgansfort/alice.md` 每次运行前后哈希比对，sha256 始终保持
+  `91a90f00…`，且其旁不出现 `.state.json`
+
+---
+
 ### 关于安全层：**明确不做**（决策记录）
 
 参照实现 `dsh-task-board` 有 loopback 检查、CSRF tripwire、proxy token、
@@ -422,16 +480,23 @@ body 上限。**本项目一概不做**，理由如下。
 - [x] **买不起就拒绝**：拒绝写入时文件**字节不变**
 - [x] 货币花销统一在总额上运算：800 cp 花 15 → **785 cp**（显示 `7 gp 8 sp 5 cp`）
 
-**阶段 3 待验收**：
-- [ ] 页面无 `__ModuleLoader__` / `Invalid effect` 报错
-- [ ] `Slots.listSubTree` 能看到 dsh-dnd 的 occupant
-- [ ] `apply` 返回函数/nullish/可迭代，**绝不返回裸对象**
-- [ ] 无 `import()`、无 `process`/`Buffer` 裸全局
-- [ ] 面板显示的数值与 `.state.json` 一致
+**阶段 3 验收**：
+- [x] 页面无 `__ModuleLoader__` / `Invalid effect` 报错
+- [x] `apply` 返回函数/nullish/可迭代，**绝不返回裸对象**（`verify-client` 断言）
+- [x] 无 `import()`、无 `process`/`Buffer` 裸全局（构建闸门 + 契约测试）
+- [x] 面板显示的数值与 `.state.json` 一致
+- [x] `ctx.inject(['webServer'])` + `ctx.effect()` 挂载，重复注册抛异常
+- [x] 买不起 → 拒绝且文件**字节不变**；重复 `key` 不二次扣款
+- [x] 空参数不写入（16 个工具全审计）
+- [ ] `Slots.listSubTree` 看到 occupant —— **需真机重启后确认**（见下）
 
 **验证方法（重要）**：
 > **动态 Cordis 插件无法验证 bundle**（不同契约）。
 > 唯一有效验证 = **真实安装 → 重启 → 查槽位 occupant + 面板数据**。
+
+> ⚠️ **尚未做的一次验证**：`/dnd/characters` 路由挂载修复（bug 9）之后
+> **还没有重启过 DSH**。改动生效于**进程重启**，不是热重载。
+> 面板与路由的真机确认仍然待办，是阶段 4 的第一件事。
 
 ---
 
@@ -462,8 +527,11 @@ v0.1.0   7be8adc  Client 加载失败（原始缺陷）
          8a6fa01  拆分：状态 / 元数据 / 叙事
          9abd241  写路径剥离过期内联元数据
          dd8a0d5  货币单一整数 + 拒绝写入非法状态
-v0.2.0           阶段 3 完成（跨端 + 面板 + 写入工具）
-v0.3.0           发布
+阶段 3   794a85d  路由改由 ctx.inject 挂载（bug 9）
+         2c1bb8c  真实角色面板，替换 smoke（3c）
+         6bdcc82  写入工具 dnd_track / dnd_spend / dnd_xp_add（3d）
+         65bc706  工具参数校验 + 16 工具空参数审计（3e）
+阶段 4   (待做)   发布 v0.2.0：semver、README 安装指令、打 tag
 ```
 
 `lib/` 继续入库——`link:` 安装需要，免构建。
@@ -489,3 +557,9 @@ v0.3.0           发布
 | 货币运算 | ✅ 统一在总额上运算，**只在总额不足时报错** |
 | 买不起 | ✅ **拒绝写入**，不记账；业务判断在工具层 |
 | 校验行为 | ✅ **只报告，绝不修正** |
+| 幂等性 | ✅ **调用方给 `key`**；无 key 则每次都应用（连打两次=两次伤害）|
+| 幂等键存储 | ✅ 存在 `.state.json` 的 `appliedKeys`，**上限 32 条**（重试是秒级的）|
+| HP 越界 | ✅ **钳制并报告**（0 是地板，不是错误；死亡豁免从 0 开始）|
+| 临时 HP | ✅ **不叠加**，取较高者（规则如此；求和会让角色比规则更强）|
+| 升级 | ✅ `dnd_xp_add` **只加经验，不自动升级**——升级改写 HP/法术位/特性，是规则决定 |
+| 安全层 | ✅ **不做**（见上；本机单人插件，默认绑回环）|
