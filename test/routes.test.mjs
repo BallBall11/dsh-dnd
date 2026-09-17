@@ -1,0 +1,367 @@
+/**
+ * routes tests — the HTTP surface the panel reads.
+ *
+ * These drive REAL http requests through a REAL server against a REAL
+ * directory. Mocking the request/response pair is what a permissive mock does
+ * best, and this project has already lost two bugs to mocks that accepted more
+ * than the real thing does. The cost is a few milliseconds of socket setup for
+ * the module that decides what the panel displays.
+ *
+ * The real `morgansfort` campaign is read but never written.
+ */
+import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { API_PREFIX, ROUTES, buildHandlers, mountRoutes } from '../src/host/routes.mjs'
+
+let failures = 0
+async function test(name, fn) {
+  try {
+    await fn()
+    console.log('  ok  ' + name)
+  } catch (error) {
+    failures += 1
+    console.log('  FAIL ' + name)
+    console.log('       ' + (error && error.message ? error.message : error))
+  }
+}
+
+const nodePath = (p) => String(p).replace(/\//g, path.sep)
+const target = (p) => ({ targetKey: String(p).toLowerCase(), displayPath: String(p).replace(/\\/g, '/') })
+
+/** A real fs service over a real directory, shaped like the host contract. */
+function makeFs() {
+  return {
+    async resolve(p) { return target(p) },
+    async stat(t) {
+      if (typeof t === 'string') throw new TypeError('stat requires an FsTarget')
+      try {
+        const s = statSync(nodePath(t.displayPath))
+        return { type: s.isDirectory() ? 'directory' : 'file', size: s.size, mtime: s.mtimeMs }
+      } catch { return undefined }
+    },
+    async readText(t) {
+      if (typeof t === 'string') throw new TypeError('readText requires an FsTarget')
+      return readFileSync(nodePath(t.displayPath), 'utf8')
+    },
+    async listDir(t) {
+      if (typeof t === 'string') throw new TypeError('listDir requires an FsTarget')
+      const { readdirSync } = require('node:fs')
+      const base = String(t.displayPath).replace(/\/$/, '')
+      return readdirSync(nodePath(t.displayPath), { withFileTypes: true }).map((e) => ({
+        name: e.name, target: target(`${base}/${e.name}`),
+        type: e.isDirectory() ? 'directory' : 'file',
+      }))
+    },
+  }
+}
+
+const { createRequire } = await import('node:module')
+const require = createRequire(import.meta.url)
+
+const root = mkdtempSync(path.join(tmpdir(), 'dnd-routes-'))
+const campaignsDir = path.join(root, 'campaigns').replace(/\\/g, '/')
+const runtimeDir = path.join(root, '.runtime').replace(/\\/g, '/')
+mkdirSync(nodePath(`${campaignsDir}/alpha/characters`), { recursive: true })
+mkdirSync(nodePath(runtimeDir), { recursive: true })
+
+const SHEET = `# Alice
+**Player:** —  **Campaign:** alpha  **Last Updated:** 2026-09-04
+
+## Identity
+- **Race:** High Elf | **Class:** Wizard | **Level:** 1 | **Background:** Sage
+- **XP:** 0 / 300
+
+## Combat Stats
+- **HP:** 8 / 8 | **Temp HP:** 0
+- **AC:** 12 | **Initiative:** +2 | **Speed:** 30
+
+## Ability Scores
+| STR | DEX | CON | INT | WIS | CHA |
+|-----|-----|-----|-----|-----|-----|
+| 8 (-1) | 14 (+2) | 15 (+2) | 17 (+3) | 10 (+0) | 10 (+0) |
+
+## Skills
+| Skill | Ability | Bonus | Proficient |
+|-------|---------|-------|-----------|
+| Arcana | INT | +5 | ✓ |
+
+## Attacks
+| Name | Attack Bonus | Damage | Type | Notes |
+|------|-------------|--------|------|-------|
+| 电爪 Shocking Grasp | +5 | 1d8 | Lightning | melee |
+
+## Spell Slots (if applicable)
+| Level | Total | Used |
+|-------|-------|------|
+| 1st | 2 | 0 |
+
+## Equipment & Inventory
+**Weapons:**
+- Dagger
+
+**Armour:**
+- *(none)*
+
+**Adventuring Gear:**
+- Robe
+
+**Currency:** 8 gp 0 sp 0 cp
+
+## Backstory & Notes
+- 游历世界收集法术的精灵法师贤者。
+`
+writeFileSync(nodePath(`${campaignsDir}/alpha/characters/alice.md`), SHEET, 'utf8')
+
+// A deliberately invalid character: more slots expended than exist.
+writeFileSync(nodePath(`${campaignsDir}/alpha/characters/broken.state.json`), JSON.stringify({
+  schema: 1, name: 'Broken',
+  combat: { hp: { current: 5, max: 5 } },
+  spellSlots: { 1: { total: 1, used: 9 } },
+  currency: 10,
+}), 'utf8')
+
+/** Point the active-campaign marker at a campaign name. */
+function activate(name) {
+  writeFileSync(nodePath(`${runtimeDir}/active-campaign.json`), JSON.stringify({ name }), 'utf8')
+}
+
+// The marker path is a module constant pointing at the real D:\DND, so the
+// handlers are exercised through a ctx whose `fs` maps that path into the
+// temporary tree. This keeps the production path shape while never touching
+// the real campaign.
+const DND_ROOT = 'D:/DND'
+function redirectFs() {
+  const base = makeFs()
+  const remap = (p) => String(p).replace(/^D:\/DND\/\.runtime/i, runtimeDir).replace(/^D:\/DND\/campaigns/i, campaignsDir)
+  return {
+    async resolve(p) { return base.resolve(remap(p)) },
+    async stat(t) { return base.stat({ ...t, displayPath: remap(t.displayPath) }) },
+    async readText(t) { return base.readText({ ...t, displayPath: remap(t.displayPath) }) },
+    async listDir(t) { return base.listDir({ ...t, displayPath: remap(t.displayPath) }) },
+  }
+}
+
+function makeCtx(fs) {
+  const registered = []
+  return {
+    registered,
+    get(name) {
+      if (name === 'fs') return fs
+      return undefined
+    },
+    effect(fn) { registered.push(fn()) },
+  }
+}
+
+/** Start a real server with the real handlers and return its base URL. */
+async function serve(ctx) {
+  const handlers = buildHandlers(ctx)
+  const server = createServer((req, res) => {
+    const pathname = new URL(req.url, 'http://x').pathname
+    const handler = handlers[pathname]
+    if (handler === undefined) { res.writeHead(404); res.end(); return }
+    Promise.resolve(handler(req, res)).catch(() => { res.writeHead(500); res.end() })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) }
+}
+
+const fsService = redirectFs()
+const ctx = makeCtx(fsService)
+
+await test('the route list is namespaced and exact', () => {
+  assert.ok(ROUTES.length >= 2)
+  for (const r of ROUTES) {
+    assert.equal(r.kind, 'exact')
+    assert.ok(r.path.startsWith(API_PREFIX), r.path)
+  }
+})
+
+activate('alpha')
+const srv = await serve(ctx)
+
+await test('GET /dnd/characters returns the active campaign', async () => {
+  const res = await fetch(`${srv.url}${API_PREFIX}/characters`)
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  assert.equal(body.campaign, 'alpha')
+  assert.ok(Array.isArray(body.characters))
+  assert.ok(body.characters.some((c) => c.name === 'alice'), JSON.stringify(body.characters.map((c) => c.name)))
+})
+
+await test('the response carries real state', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  const alice = body.characters.find((c) => c.name === 'alice')
+  assert.equal(alice.state.abilities.INT, 17)
+  assert.deepEqual(alice.state.combat.hp, { current: 8, max: 8 })
+  assert.deepEqual(alice.state.spellSlots, { 1: { total: 2, used: 0 } })
+  assert.equal(alice.state.currency, 800, 'money is a single copper total')
+  assert.equal(alice.state.attacks[0].name, '电爪 Shocking Grasp', 'CJK survives JSON')
+})
+
+await test('the response carries display projections', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  const alice = body.characters.find((c) => c.name === 'alice')
+  assert.equal(alice.display.currency, '8 gp 0 sp 0 cp',
+    'money is formatted on the host so the panel cannot drift')
+  assert.equal(alice.display.class, 'Wizard')
+})
+
+await test('an unmigrated character reports needsMigration', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  const alice = body.characters.find((c) => c.name === 'alice')
+  assert.equal(alice.needsMigration, true)
+  assert.equal(alice.hasStateFile, false)
+})
+
+await test('an invalid state is reported, not hidden', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  const broken = body.characters.find((c) => c.name === 'broken')
+  assert.ok(broken !== undefined, 'a state file with no sheet is still a character')
+  assert.ok(broken.findings.some((f) => f.includes('ERROR')), JSON.stringify(broken.findings))
+})
+
+await test('the counts distinguish empty from broken', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  assert.equal(body.counts.characters, 2)
+  assert.equal(body.counts.withStateFile, 1)
+})
+
+await test('responses are marked no-store so the panel cannot show stale numbers', async () => {
+  const res = await fetch(`${srv.url}${API_PREFIX}/characters`)
+  assert.match(res.headers.get('cache-control') ?? '', /no-store/)
+})
+
+await test('the response is valid UTF-8 JSON', async () => {
+  const res = await fetch(`${srv.url}${API_PREFIX}/characters`)
+  assert.match(res.headers.get('content-type') ?? '', /application\/json/)
+  assert.match(res.headers.get('content-type') ?? '', /charset=utf-8/)
+})
+
+await test('GET /dnd/health reports the data source', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/health`)).json()
+  assert.equal(body.ok, true)
+  assert.equal(body.fs, true)
+  assert.equal(body.campaign, 'alpha')
+})
+
+await test('an unknown path is a 404', async () => {
+  const res = await fetch(`${srv.url}/dnd/nope`)
+  assert.equal(res.status, 404)
+})
+
+// --- a stale marker -------------------------------------------------------
+await test('a marker naming a missing campaign yields 404, not an empty list', async () => {
+  // The distinctive failure: a stale marker would otherwise read as "this
+  // campaign has no characters", sending the DM to look in the wrong place.
+  writeFileSync(nodePath(`${runtimeDir}/active-campaign.json`), JSON.stringify({ name: 'nope' }), 'utf8')
+  const res = await fetch(`${srv.url}${API_PREFIX}/characters`)
+  assert.equal(res.status, 404)
+  const body = await res.json()
+  assert.match(body.error, /stale/)
+  assert.match(body.error, /nope/)
+})
+
+await test('health distinguishes a stale marker from no marker', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/health`)).json()
+  assert.equal(body.ok, false)
+  assert.equal(body.fs, true, 'the filesystem itself is fine')
+  assert.equal(body.campaign, 'nope', 'the stale name is reported, not blanked')
+  assert.match(body.reason, /directory missing/)
+})
+
+await test('no marker at all reports no active campaign', async () => {
+  rmSync(nodePath(`${runtimeDir}/active-campaign.json`), { force: true })
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/health`)).json()
+  assert.equal(body.ok, false)
+  assert.equal(body.campaign, null)
+  assert.match(body.reason, /no active campaign/)
+})
+
+// --- a missing fs ---------------------------------------------------------
+await test('a missing fs yields 503 rather than a crash', async () => {
+  const noFs = makeCtx(undefined)
+  const s2 = await serve(noFs)
+  const res = await fetch(`${s2.url}${API_PREFIX}/characters`)
+  assert.equal(res.status, 503)
+  const body = await res.json()
+  assert.match(body.error, /fs service unavailable/)
+  await s2.close()
+})
+
+await srv.close()
+
+// --- mounting -------------------------------------------------------------
+await test('mountRoutes registers every route through the ctx effect', () => {
+  const registered = []
+  const disposers = []
+  const mountCtx = {
+    get: (n) => (n === 'webServer' ? { register: (r) => { registered.push(r.path); const d = () => disposers.push(r.path); return d } } : undefined),
+  }
+  mountRoutes(mountCtx)
+  assert.deepEqual(registered.sort(), ROUTES.map((r) => r.path).sort())
+})
+
+await test('the mount disposer removes every route', () => {
+  const registered = []
+  const removed = []
+  const mountCtx = {
+    get: (n) => (n === 'webServer' ? { register: (r) => { registered.push(r.path); return () => removed.push(r.path) } } : undefined),
+  }
+  const dispose = mountRoutes(mountCtx)
+  assert.equal(typeof dispose, 'function')
+  dispose()
+  assert.deepEqual(removed.sort(), ROUTES.map((r) => r.path).sort(),
+    'every route must be removable: a duplicate (kind,path) throws on reload')
+})
+
+await test('mountRoutes returns null when webServer is absent', () => {
+  // A headless run has no web server. Returning null rather than a bogus
+  // disposer keeps ctx.effect honest.
+  assert.equal(mountRoutes({ get: () => undefined }), null)
+})
+
+await test('a duplicate route registration throws, which is why disposers matter', () => {
+  const seen = new Set()
+  const throwing = {
+    get: () => ({
+      register: (r) => {
+        if (seen.has(r.path)) throw new Error('duplicate route')
+        seen.add(r.path)
+        return () => seen.delete(r.path)
+      },
+    }),
+  }
+  const dispose = mountRoutes(throwing)
+  assert.throws(() => mountRoutes(throwing), /duplicate route/,
+    'the second mount without disposal must fail — this is the reload hazard')
+  dispose()
+  assert.doesNotThrow(() => mountRoutes(throwing), 'after disposal the remount succeeds')
+})
+
+// --- the real campaign, read-only ----------------------------------------
+const REAL = 'D:/DND/campaigns/morgansfort/characters/alice.md'
+const realExists = (() => { try { return statSync(nodePath(REAL)).isFile() } catch { return false } })()
+if (realExists) {
+  await test('the real campaign is untouched by these tests', async () => {
+    const before = readFileSync(nodePath(REAL), 'utf8')
+    // The real tree has no .state.json beside alice.md; asserting that keeps
+    // a future test from quietly migrating it.
+    let hasState = true
+    try { statSync(nodePath('D:/DND/campaigns/morgansfort/characters/alice.state.json')) } catch { hasState = false }
+    assert.equal(hasState, false, 'no state file may be created for the real character')
+    assert.equal(readFileSync(nodePath(REAL), 'utf8'), before)
+  })
+}
+
+rmSync(root, { recursive: true, force: true })
+
+console.log('')
+if (failures > 0) {
+  console.error(`routes.test.mjs: ${failures} failure(s)`)
+  process.exit(1)
+}
+console.log('routes.test.mjs: all assertions passed')

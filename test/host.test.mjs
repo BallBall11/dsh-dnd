@@ -337,6 +337,64 @@ await test('inject gates on tools only, so a missing fs cannot unmount the pure 
     + 'the filesystem is unavailable. Got ' + JSON.stringify(host.inject))
 })
 
+// --- routes are mounted without endangering the tools ---------------------
+// The routes serve the Client panel; the tools are the plugin's main purpose.
+// Failing to mount routes must never cost the tools.
+
+await test('a missing webServer does not stop the tools from registering', async () => {
+  const late = []
+  const ctxNoWeb = {
+    get(name) {
+      if (name === 'tools') return { register: (t) => { late.push(t); return () => {} } }
+      if (name === 'fs') return fsService
+      return undefined
+    },
+  }
+  const mod = await import('../src/host/index.mjs?no-webserver')
+  const dispose = mod.apply(ctxNoWeb)
+  assert.equal(typeof dispose, 'function')
+  assert.equal(late.length, 11, 'all 11 tools must still register without a web server')
+})
+
+await test('routes are registered through ctx.effect when webServer exists', async () => {
+  const mounted = []
+  const effects = []
+  const ctxWithWeb = {
+    get(name) {
+      if (name === 'tools') return { register: () => () => {} }
+      if (name === 'fs') return fsService
+      if (name === 'webServer') {
+        return { register: (r) => { mounted.push(r.path); return () => { mounted.splice(mounted.indexOf(r.path), 1) } } }
+      }
+      return undefined
+    },
+    effect(fn) { effects.push(fn()) },
+  }
+  const mod = await import('../src/host/index.mjs?webserver')
+  mod.apply(ctxWithWeb)
+  assert.ok(effects.every((e) => typeof e === 'function' || e === null),
+    'every effect must be a function/nullish, or the fiber rejects it')
+  assert.ok(mounted.includes('/dnd/characters'), JSON.stringify(mounted))
+  assert.ok(mounted.includes('/dnd/health'), JSON.stringify(mounted))
+})
+
+await test('ctx.effect is optional, not assumed', async () => {
+  // A ctx without `effect` must fall back to holding the disposer rather than
+  // throwing away the tools.
+  const mounted = []
+  const ctxPlain = {
+    get(name) {
+      if (name === 'tools') return { register: () => () => {} }
+      if (name === 'fs') return fsService
+      if (name === 'webServer') return { register: (r) => { mounted.push(r.path); return () => {} } }
+      return undefined
+    },
+  }
+  const mod = await import('../src/host/index.mjs?no-effect')
+  assert.doesNotThrow(() => mod.apply(ctxPlain))
+  assert.ok(mounted.length > 0, 'routes should still mount')
+})
+
 console.log('')
 if (failures > 0) {
   console.error(`host.test.mjs: ${failures} failure(s)`)

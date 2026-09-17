@@ -37,7 +37,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node test/state-schema.test.mjs && node test/state-rules.test.mjs && node test/frontmatter.test.mjs && node test/sheet-split.test.mjs && node test/state-io.test.mjs && node test/sheet-parse.test.mjs && node test/host.test.mjs && node test/build.test.mjs",
+    "test": "node test/state-schema.test.mjs && node test/state-rules.test.mjs && node test/frontmatter.test.mjs && node test/sheet-split.test.mjs && node test/state-io.test.mjs && node test/sheet-parse.test.mjs && node test/routes.test.mjs && node test/host.test.mjs && node test/build.test.mjs",
     "verify": "node scripts/verify-client.mjs",
     "check": "npm run build && npm test && npm run verify"
   },

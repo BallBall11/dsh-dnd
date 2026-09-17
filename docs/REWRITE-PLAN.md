@@ -329,15 +329,75 @@ characters/alice.md           frontmatter + 摘要块 + 叙事（人维护）
 
 > 前置：阶段 2 已验收（`campaigns/stage2-test` 端到端跑通）。
 
-1. **`src/host/routes.mjs`**：`ctx.inject(['webServer'], ...)` + `ctx.effect()` 注册
-   `GET /dnd/characters`（`webServer.register({kind:'exact', path, handler})`）
-2. **Client 改用 `fetch`**，移除所有 `host.call`（缺陷 C —— bundle 无 `pluginId`/`pluginRunId`）
-3. **真实面板**：HP 条 / 六维 / 技能 / 攻击 / 法术位 / `warnings[]`
-4. **写入工具**：`dnd_track` / `dnd_spend` / `dnd_xp_add`——**业务判断在工具层**（§6 规则 5）
-5. **补工具参数校验**（真机测试误传参数暴露：缺 `query` 时执行成搜索 `"undefined"`）
+**分为 3a–3e 五步**，每步可独立验收。原计划把五件事堆成一个阶段，
+出问题无法定位——v0.1.0 的失败模式正是「业务逻辑写在能加载之前」。
+
+#### 3a 路由（无 UI）
+
+- `src/host/routes.mjs`：`inject(['webServer'])` + `ctx.effect()` 管理 disposer
+- `GET /dnd/characters` → JSON
+- **契约测试**：用真实 http 请求打这条路由
+
+**验收**：`curl 127.0.0.1:3080/dnd/characters` 返回 Alice 的 JSON。
+
+#### 3b Client 改 fetch（UI 不变）
+
+- `host.call` → `fetch`（相对路径，裸 fetch，无 credentials）
+- **UI 保持 smoke**，只把数据源换成真实路由
+- **先证明通道通，再做面板**——v0.1.0 就是面板写完了才发现 `host.call` 在
+  bundle 里根本不可用（缺陷 C）
+
+**验收**：重启后 smoke 面板显示「读到 N 个角色」。
+
+#### 3c 真实角色面板
+
+- HP 条 / 六维 / 技能 / 攻击 / 法术位 / `warnings[]`
+- 替换 smoke 面板
 
 **验收**：面板显示 `stage2-test` 的 Alice 真实数据（HP 5/8, AC 12, INT 17 (+3),
 法术位 1环 1/2, 7 gp 8 sp 5 cp），`warnings[]` 有内容时显式显示。
+
+#### 3d 写入工具
+
+- `dnd_track` / `dnd_spend` / `dnd_xp_add`
+- **业务判断在工具层**（§6 规则 5）：买不起 → 工具返回给 DM，写入层校验只作兜底
+- **幂等性**：重复请求不重复扣款
+- 全部测试在 `stage2-test`
+
+**验收**：`dnd_spend` 买得起 → 写入；买不起 → 拒绝且文件字节不变。
+
+#### 3e 工具参数校验
+
+- 补 `query` 等必填校验（真机误传暴露：缺 `query` 时执行成搜索 `"undefined"`）
+
+---
+
+### 关于安全层：**明确不做**（决策记录）
+
+参照实现 `dsh-task-board` 有 loopback 检查、CSRF tripwire、proxy token、
+body 上限。**本项目一概不做**，理由如下。
+
+**事实**：`dsh-web-app/cordis.patch.yml` 写的是
+`host: !!js ctx.webStartup.host ?? '127.0.0.1'`——**默认绑定回环**。
+要监听局域网必须有人**主动改配置**。
+
+**判断**：`dsh-task-board` 是**发布给所有 DSH 用户的通用插件**，用户可能配
+`0.0.0.0`、走反向代理、暴露公网，所以它必须自己设防。`dsh-dnd` 是**本机私人
+插件**，就在自己的机器上玩 D&D。为「除非主动配置否则不会发生」的情况加防护，
+是**为想象中的威胁写代码**。
+
+**更重要的分层理由**：若真到了需要防局域网的地步，该修的是**绑定地址**，
+不是给每条路由加一遍检查。每个插件作者各自判断安全边界本身就是错误的分层。
+
+**保留的唯一防护**：`register()` 的 disposer 必须交给 `ctx.effect()`。
+因为 `webServer` 契约明确「重复 (kind, path) **抛异常**」
+（`dsh-host-webserver/lib/types/index.d.ts:85-90`），热重载时旧路由未清理会
+**导致挂载失败**。这不是安全考虑，是正确性问题。
+
+**这处错误的性质**：与 `| Slot |` 表头错误**是同一类错误的反面**——
+那次是**凭空想象**一个不存在的规范，这次是**过度套用**一个不适用的规范
+（把「权威实现的做法」当成了「权威规范」）。前者是特定场景的解决方案，
+后者才是必须遵守的契约。
 
 ### 阶段 4 —— 发布
 
