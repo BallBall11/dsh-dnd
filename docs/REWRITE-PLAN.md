@@ -1,6 +1,6 @@
 # dsh-dnd 重写方案：功能清单与实施计划
 
-> 状态：**规划完成。阶段 0、1 已实施并真机验证。**
+> 状态：**阶段 0、1、2 已实施并实测通过。阶段 3（跨端 + 面板 + 写入工具）待做。**
 > 范围：**只重写 `dsh-dnd` 插件**（Host 工具族 + Client 面板）。
 > 不改 `.agents/skills/dnd/`（那是已安装的 skill，`D:\DND\AGENTS.md` 明令不动）。
 > 前置阅读：`docs/BUNDLE-COMPAT-AUDIT.md`（三缺陷诊断，本方案是它的执行版）。
@@ -149,7 +149,9 @@
     "gear":    { "Spellbook": 1, "Parchment": 8 }
   },
 
-  "currency": { "gp": 8, "sp": 0, "cp": 0 },
+  // 货币：单一铜币整数。三级币种只出现在读写边界。
+  // 理由见 §6 规则 2——三分字段永远存在中间态。
+  "currency": 800,
   "warnings": []                     // 解析期问题，绝不静默吞掉
 }
 ```
@@ -268,28 +270,81 @@ JS 对象会把**整数样式的键提升到前面并升序排列**：
 
 ## 6. 后续阶段
 
-### 阶段 2 —— 跨端通道 + 角色面板
+### 阶段 2 —— 状态层（✅ 已完成，真机验证）
 
-1. **拆分状态与叙事**：新增 `src/host/tools/state-io.mjs`
-   - `readState(fs, dir, name)` → 解析 `.state.json`（不存在则从 `.md` 迁移，见下）
-   - `writeState(fs, dir, name, state)` → 确定性序列化 + 原子替换
-   - **迁移路径**：首次遇到只有 `.md` 的角色时，解析其结构化区块生成 `.state.json`，
-     并把 `.md` 中的结构化区块替换为摘要块。**迁移前备份原文件**
-2. **摘要工具**：`formatCharacter` 已有，扩展为从状态对象生成（实测 1055 → ~120 token，降 88%）
-3. **`src/host/routes.mjs`**：`ctx.inject(['webServer'], ...)` + `ctx.effect()` 注册
+拆分为 **2a–2h** 逐段实施，每段测试通过后再进下一段。产物：
+
+| 模块 | 职责 |
+|---|---|
+| `tools/state-schema.mjs` | 结构化 schema + **确定性**序列化（26 断言） |
+| `tools/state-rules.mjs` | **货币单一整数**换算 + 合法性校验 |
+| `tools/frontmatter.mjs` | YAML frontmatter 读写（子集，无依赖） |
+| `tools/clock.mjs` | **双时钟**：实钟 + 世界钟（读 `calendar.json`） |
+| `tools/sheet-split.mjs` | 拆分：结构化 / 叙事 / 元数据 |
+| `tools/state-io.mjs` | 读写两文件，读**永不写** |
+
+**一个角色 = 两个文件**：
+
+```
+characters/alice.state.json   结构化状态（机器权威）  currency 为单一整数
+characters/alice.md           frontmatter + 摘要块 + 叙事（人维护）
+```
+
+**已确立的规则**：
+
+1. **每个事实只有一个归属**——数值在 `.state.json`，叙事在 `.md` 正文，
+   文件属性（player/campaign/updated/worldTime/tags）在 `.md` frontmatter
+2. **货币是单一铜币整数**。三级币种只出现在读写边界。
+   **理由**：三分字段永远存在中间态，改其一就产生「算术正确、物理无意义」的值
+   （`8 gp 0 sp 0 cp` 花 15 cp → `-15 cp`）。单一整数让坏状态**无法被构造**
+3. **买单看总额**，不看单个币种——800 cp 买得起 15 cp 的东西，即使没有铜币
+4. **买不起就拒绝**，不记账。校验只报告、绝不修正——「把负数改成 0」比 bug 更糟，
+   因为 DM 看到貌似合理的数字，永远不知道角色曾处于不可能状态
+5. **分层**：`dnd_spend` 等工具在**工具层**做业务判断（买不起 → 返回给 DM），
+   `writeCharacter` 的校验作**兜底**。拒绝购买是业务决定，不该只在写入层发生
+6. **读取永不写入**——面板会轮询，读操作若能写，每次翻页都是一次文件改动
+
+**阶段 2 真机/实测抓出的 bug（8 个）**：
+
+| # | Bug | 后果 | 为何测试漏掉 |
+|---|---|---|---|
+| 1 | BOM 致"无活跃战役" | 工具报错 | 手写 fixture 不含 BOM |
+| 2 | 挂载时缓存 `fs` | 数据工具全废 | mock 的 fs 永远就绪 |
+| 3 | 传路径而非 `FsTarget` | 目录列举恒空 | **mock 比真实实现宽松** |
+| 4 | 豁免分隔行误判 | 六项豁免全 `null` | fixture 无负值豁免 |
+| 5 | `**Currency:**` 当物品 | 背包多出假条目 | 未测真实角色卡 |
+| 6 | 熟练豁免丢修正 | `+5*` → NaN | fixture 无熟练标记 |
+| 7 | **空 frontmatter 摧毁文档** | 下次读取**吞掉整个文件** | 未试过空元数据 |
+| 8 | 摘要块当正文 | 每次写入**套娃**一层 | 只测了一次往返 |
+
+**第 3 个的教训最重**：mock 接受字符串，于是它验证的是"代码怎么调"而非"服务怎么定义"。
+**比真实实现宽松的 mock 不可能失败。** 已重建为严格形态。
+
+**另一处自我更正**：曾把"解析器只认 `| Slot |`"当作 v0.1.0 的缺陷。
+查证后：模板（`templates/character-sheet.md:67`）与 `session_recap.py:153` 都明确写
+**`| Level | Total | Used |`**，`alice.md` 完全正确。`Slot` 是**我自己凭空假设的表头**。
+**根因：照想象写，而非照权威来源写。**
+
+### 阶段 3 —— 跨端通道 + 角色面板
+
+> 前置：阶段 2 已验收（`campaigns/stage2-test` 端到端跑通）。
+
+1. **`src/host/routes.mjs`**：`ctx.inject(['webServer'], ...)` + `ctx.effect()` 注册
    `GET /dnd/characters`（`webServer.register({kind:'exact', path, handler})`）
-4. **Client 改用 `fetch`**，移除所有 `host.call`（缺陷 C —— bundle 无 `pluginId`/`pluginRunId`）
-5. **真实面板**：HP 条 / 六维 / 技能 / 攻击 / 法术位 / `warnings[]`
-6. **补工具参数校验**（真机测试中误传参数暴露：缺 `query` 时执行成搜索 `"undefined"`）
+2. **Client 改用 `fetch`**，移除所有 `host.call`（缺陷 C —— bundle 无 `pluginId`/`pluginRunId`）
+3. **真实面板**：HP 条 / 六维 / 技能 / 攻击 / 法术位 / `warnings[]`
+4. **写入工具**：`dnd_track` / `dnd_spend` / `dnd_xp_add`——**业务判断在工具层**（§6 规则 5）
+5. **补工具参数校验**（真机测试误传参数暴露：缺 `query` 时执行成搜索 `"undefined"`）
 
-**验收**：面板显示 morgansfort 的 Alice 真实数据（HP 8/8, AC 12, INT 17 (+3), 法术位 1环 0/2）。
+**验收**：面板显示 `stage2-test` 的 Alice 真实数据（HP 5/8, AC 12, INT 17 (+3),
+法术位 1环 1/2, 7 gp 8 sp 5 cp），`warnings[]` 有内容时显式显示。
 
-### 阶段 3 —— 写入 + 发布
+### 阶段 4 —— 发布
 
-1. `dnd_track` / `dnd_xp_add` 写入 `.state.json`（**无互斥需求**——没有第二个写入者）
-2. 定点更新 `.md` 的摘要块，正文不动
-3. `v0.2.0` 打 tag，README 补安装指令（`dsh plugin --profile web add ...`）
-4. `package.json` 版本号改为合法 semver（当前 `0.2.0-stage0` 不可发布）
+1. `v0.2.0` 打 tag，README 补安装指令（`dsh plugin --profile web add ...`）
+2. `package.json` 版本号改为合法 semver（当前 `0.2.0-stage0` 不可发布）
+3. **真实战役迁移**：`morgansfort/alice.md` 拆分——**需你明确同意后才执行**，
+   且迁移前备份
 
 **验收**：全部写入测试在 throwaway 战役；**真实 `morgansfort/alice.md` 保持不动**。
 
@@ -297,21 +352,26 @@ JS 对象会把**整数样式的键提升到前面并升序排列**：
 
 ## 7. 验收标准
 
-**通用**：
+**阶段 2 已完成（✅ 实测通过）**：
+- [x] `.state.json` 序列化**确定性**：同一对象两次序列化字节相同
+- [x] 序列化→解析→序列化 **幂等**
+- [x] 中文物品名/法术名 round-trip 无损
+- [x] `.md` 摘要块外的正文**写入前后字节相同**
+- [x] 迁移后再次迁移**到达不动点**（1636 → 1636 字节，哈希相同）
+- [x] 读取真实 `alice.md` 后**字节不变**，且**不产生** `.state.json`
+- [x] **买不起就拒绝**：拒绝写入时文件**字节不变**
+- [x] 货币花销统一在总额上运算：800 cp 花 15 → **785 cp**（显示 `7 gp 8 sp 5 cp`）
+
+**阶段 3 待验收**：
 - [ ] 页面无 `__ModuleLoader__` / `Invalid effect` 报错
 - [ ] `Slots.listSubTree` 能看到 dsh-dnd 的 occupant
 - [ ] `apply` 返回函数/nullish/可迭代，**绝不返回裸对象**
 - [ ] 无 `import()`、无 `process`/`Buffer` 裸全局
+- [ ] 面板显示的数值与 `.state.json` 一致
 
 **验证方法（重要）**：
 > **动态 Cordis 插件无法验证 bundle**（不同契约）。
 > 唯一有效验证 = **真实安装 → 重启 → 查槽位 occupant + 面板数据**。
-
-**新增（本次修订）**：
-- [ ] `.state.json` 序列化**确定性**：同一对象两次序列化字节相同
-- [ ] 序列化→解析→序列化 **幂等**
-- [ ] 中文物品名/法术名 round-trip 无损
-- [ ] `.md` 摘要块外的正文**写入前后字节相同**
 
 ---
 
@@ -337,8 +397,13 @@ v0.1.0   7be8adc  Client 加载失败（原始缺陷）
          a8bc7df  fs 依赖修复（后被 0ca5136 修正）
          0ca5136  仅 tools 硬依赖
          0d6f72e  FsTarget 契约修复
-v0.2.0           阶段 2 完成（状态层 + 跨端 + 面板）
-v0.3.0           阶段 3 完成（写入 + 发布）
+计划 v2  db5edca  定位重写：独立数据层，skill 仅供参考
+阶段 2   da104e1  state-schema + 确定性序列化
+         8a6fa01  拆分：状态 / 元数据 / 叙事
+         9abd241  写路径剥离过期内联元数据
+         dd8a0d5  货币单一整数 + 拒绝写入非法状态
+v0.2.0           阶段 3 完成（跨端 + 面板 + 写入工具）
+v0.3.0           发布
 ```
 
 `lib/` 继续入库——`link:` 安装需要，免构建。
@@ -357,3 +422,10 @@ v0.3.0           阶段 3 完成（写入 + 发布）
 | 装备数量表达 | ✅ 字典键值对（非 `"Parchment x8"`）|
 | 与 skill 的关系 | ✅ **仅供参考，不再调用** |
 | 写入互斥 | ✅ **不需要**（无第二写入者）|
+| 元数据位置 | ✅ `.md` frontmatter（YAML 子集） |
+| 时钟 | ✅ **双时钟**：实钟 + 世界钟，每次写入都刷新 |
+| 摘要块内容 | ✅ **只有数值**，不含元数据 |
+| 货币存储 | ✅ **单一铜币整数**，币种只在读写边界 |
+| 货币运算 | ✅ 统一在总额上运算，**只在总额不足时报错** |
+| 买不起 | ✅ **拒绝写入**，不记账；业务判断在工具层 |
+| 校验行为 | ✅ **只报告，绝不修正** |
