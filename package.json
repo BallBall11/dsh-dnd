@@ -1,8 +1,8 @@
 {
   "name": "dsh-dnd",
-  "version": "0.2.0-stage0",
+  "version": "0.2.0",
   "private": true,
-  "description": "D&D for DSH: native Host tool suite (dice, SRD, mechanics, sheets, XP, tracking) plus an extensible Client panel registry. Native acceleration layer over the dnd skill's Python scripts, never a replacement.",
+  "description": "D&D for DSH: a native Host tool suite (dice, SRD lookup, campaign search, character state, XP and coin) plus a Client character panel, backed by a two-file character model with one authoritative copy of every number.",
   "type": "module",
   "main": "lib/host/index.mjs",
   "exports": {

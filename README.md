@@ -1,169 +1,236 @@
 # dsh-dnd
 
-D&D for DSH — a **release bundle** for the DeepSeek Harness web profile: a cohesive
-family of native Host tool plugins plus a panel-oriented Client character panel.
+D&D for DSH — a bundle for the DeepSeek Harness **web** profile: fourteen native
+Host tools plus a Client character panel, backed by a two-file character model.
 
-- **No theme skin.** The earlier dusk-skin token override was removed on purpose;
-  the panel renders with the host's own theme tokens.
-- **Panel-oriented.** A small panel registry ships only the character panel today;
-  future panels (spellbook, inventory, combat log, …) are appended to that registry
-  without touching the Host modules.
-
-```
-dsh plugin --profile web add dsh-dnd        # published / registry
-dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle   # local / git (no registry)
-```
-
-That one command reconciles `dsh.profile.bundles`, appends the bundle to the stack,
-and mounts both the Host tools and the Client panel on next boot — no manual
-`cordis.patch.yml` edits, matching how other DSH web plugins install.
-
----
+Every number in a character has exactly one home. The structured state lives in
+`characters/<name>.state.json`; the narrative prose lives in
+`characters/<name>.md`. Neither file duplicates the other, so they cannot drift
+apart — which is the failure this design exists to prevent.
 
 ## Install
 
-### Option A — published (registry)
-
 ```bash
-# latest
-dsh plugin --profile web add dsh-dnd
-# pinned
-dsh plugin --profile web add dsh-dnd@0.1.0
-```
-
-### Option B — local git checkout (no registry)
-
-```bash
-# built bundle is git-versioned; install straight from the working tree
+# from a local git checkout (no registry needed) — the built bundle is committed
 dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle
+
+# from a registry, once published
+dsh plugin --profile web add dsh-dnd
+dsh plugin --profile web add dsh-dnd@0.2.0     # pinned
 ```
 
-> If `D:/DND` is not writable at install time, copy the repo somewhere stable and
-> point `link:` at that copy.
+That single command runs pnpm inside the profile, reconciles
+`dsh.profile.bundles`, and mounts both the Host tools and the Client panel on
+the next boot — no manual `cordis.patch.yml` edits.
 
-### Option C — helper script (idempotent, Windows / POSIX)
+Then **restart the web profile**. `dsh plugin add` installs; it does not hot-load.
+The bundle's route mounting and panel registration both take effect at process
+start, so a running harness will not see them until it restarts.
+
+Verify after restarting:
+
+```bash
+# the routes are up (expect JSON, not a 404 with an empty body)
+curl http://127.0.0.1:3080/dnd/characters
+
+# the tools are registered — look for dnd_roll, dnd_track, dnd_spend ...
+```
+
+In the GUI, a ⚔ button appears in the sidebar footer; it opens the character
+panel.
+
+Remove it again with:
+
+```bash
+dsh plugin --profile web remove dsh-dnd
+```
+
+### Helper scripts
+
+`scripts/install.ps1` and `scripts/install.sh` wrap the same command.
 
 ```powershell
-# local link install
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1
-# pinned registry version and restart the web profile
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Version 1.0.0 -Restart
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1            # local link
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Version 0.2.0
 ```
 
 ```bash
-./scripts/install.sh            # local link install
-./scripts/install.sh 1.0.0      # pinned registry version
+./scripts/install.sh          # local link
+./scripts/install.sh 0.2.0    # pinned registry version
 ```
 
-### After install
+`-DryRun` prints the commands without running them.
 
-1. Restart the `web` profile: `pm2 restart dsh-web` (or restart the profile service).
-2. **Remove any stale manual mount row.** If the profile's own `cordis.patch.yml`
-   (or the old `dnd-host` install) still mounts D&D plugin rows by hand, delete
-   them — otherwise the tools/panel double-mount.
-3. Verify: the Host tools (`dnd_roll`, `dnd_check`, `dnd_attack`, `dnd_save`,
-   `dnd_character_get`, `dnd_campaign_search`, `dnd_xp_add`, `dnd_track`) appear in
-   the tool list, and the ⚔ 角色 button opens the character panel.
-4. Uninstall anytime: `dsh plugin --profile web remove dsh-dnd`.
+> **Upgrading from v0.1.0:** that version could not load its Client half at all,
+> and it may have left a hand-written `dnd-host` mount row in the profile's
+> `cordis.patch.yml`. Remove that row, or the tools will double-mount.
 
----
+## What it provides
 
-## What it ships
+### Character model
 
-### Host tool modules (each a cohesive plugin row, consumed from the host registries)
+A character is **two files**:
 
-| File | Tools | Notes |
-|---|---|---|
-| `lib/host/dnd-core.mjs` | `dnd_roll`, `dnd_srd_lookup`, `dnd_campaign_state` | bootstrap/reference, moved from the old dnd-host.mjs |
-| `lib/host/dnd-mechanics.mjs` | `dnd_check`, `dnd_attack`, `dnd_save` | pure d20 table resolution (adv/dis, nat20/1, crit) |
-| `lib/host/dnd-sheet.mjs` | `dnd_character_get`, `dnd_campaign_search` | read-only; also feeds the panel (`dnd.characters`) |
-| `lib/host/dnd-xp.mjs` | `dnd_xp_add` | CR→XP, level-up write-back for character sheets |
-| `lib/host/dnd-track.mjs` | `dnd_track` | HP damage/heal, temp HP, inspiration, death saves (first cut) |
-
-The modules are **not** a mega-plugin: each owns one domain, fails alone, and can be
-disabled independently (set `disabled: true` on the row in `cordis.patch.yml`).
-
-### Client module
-
-```text
-src/client/panel.js  ->  lib/client.js   (dsh.client, platform: web)
+```
+campaigns/<campaign>/characters/alice.state.json   structured state — authoritative
+campaigns/<campaign>/characters/alice.md           frontmatter + summary + prose
 ```
 
-A panel registry (`PANELS`) with a single character-panel entry: a
-`sidebar.footer.action` toggle ("⚔ 角色") that opens a floating `shell.overlay`
-card. It is fed by the Host `dnd.characters` handler. The pkg-3 footer-layout fix
-(vertical stacking under the shell badge, non-clipping glyph) is retained.
+The `.state.json` holds abilities, HP, AC, skills, attacks, spell slots, spells,
+equipment, currency, conditions and XP. The `.md` holds the YAML frontmatter
+(who the file belongs to, both clocks), a generated summary block fenced by
+`<!-- dsh-dnd:generated -->` markers, and the narrative — the player's own
+description and history, which is never parsed into fields and never reformatted.
 
----
+A sheet written before this split (structured sections inline in the `.md`) still
+reads: the state is derived from the sheet on read, and `needsMigration` reports
+that no state file exists. Reading never rewrites — migration is an explicit
+write.
 
-## Build & dev
+**Money is one integer.** A purse is a copper total (`currency: 785`), never
+three fields. Denominations exist only at the edges: parsed on input, produced
+for display. Three fields always admit an intermediate state, and
+`8 gp 0 sp 0 cp` minus `15 cp` becoming `8 gp 0 sp -15 cp` is arithmetically 785
+and physically meaningless. Affordability is judged on the total, so 800 cp can
+pay a 15 cp cost with no copper pieces.
+
+**Both clocks are stamped on every write**: `updated` (real date) and
+`worldTime` (in-world, from the campaign's `calendar.json`).
+
+### Host tools (14)
+
+| Tool | Purpose |
+|---|---|
+| `dnd_roll` | Any dice expression: `2d6+3`, `4d6kh3`, advantage/disadvantage |
+| `dnd_check` | Ability or skill check vs a DC |
+| `dnd_attack` | Attack vs AC, with crit damage on a natural 20 |
+| `dnd_save` | Saving throw vs a DC (also death saves) |
+| `dnd_dc` | The DC ladder, and passive scores |
+| `dnd_mastery` | 2024 weapon mastery properties (Cleave, Topple, Vex, …) |
+| `dnd_srd_lookup` | Bundled 5e SRD entry by name and category |
+| `dnd_campaign_state` | The active campaign's `state.md`, in whole or by section |
+| `dnd_campaign_search` | Full-text search of the campaign corpus — use before reading whole files |
+| `dnd_arc_status` | Where the campaign arc currently stands |
+| `dnd_character_get` | Read one character or the whole party, as JSON or a card |
+| `dnd_track` | **Write** HP, temp HP, spell slots, XP, conditions, consumables |
+| `dnd_spend` | **Write** coin out of the purse |
+| `dnd_xp_add` | **Write** an XP award |
+
+The eleven read tools are pure. The three write tools live in their own module
+(`lib/host/tools/track.mjs`) so the write path can be read and tested on its own.
+
+**Business judgement happens at the tool layer.** `dnd_spend` decides whether a
+purchase is affordable and tells the DM the shortfall; the write layer's
+validation is only a backstop for a state that cannot exist. A decision made
+only at the write layer would be invisible — the tool would report success while
+the numbers did not move.
+
+**A refused write changes nothing.** An unaffordable purchase is refused rather
+than recorded as a debt, and validation reports problems without repairing them:
+silently clamping a negative purse to zero would show the DM a plausible number
+that is not true.
+
+**Idempotency is keyed.** Pass `key` and a repeated call is a no-op, so a retry
+cannot double-charge. Without a key every call applies, which is the correct
+default — a DM saying "take 5 damage" twice means 10.
+
+### Client panel
+
+A character panel registered into two slots: a `sidebar.footer.action` toggle
+(⚔) and a `shell.overlay` card. It shows HP with a coloured band, the six
+abilities with modifiers, AC, initiative and speed, spell save DC, coin, spell
+slots, proficiencies, attacks — and any validation findings, rendered explicitly
+rather than hidden, because a DM reading a plausible number that is not true is
+the failure this whole design is aimed at.
+
+Data arrives over `GET /dnd/characters`. It is **not** `host.call`: that path
+needs a `pluginId` and `pluginRunId` which only dynamic Cordis plugins have, so
+a bundle can never use it. That mistake is what made v0.1.0 unloadable.
+
+The panel renders what the Host sends and formats almost nothing itself — money
+arrives pre-formatted and findings arrive as strings, because recomputing either
+in the browser would give two places to drift.
+
+**No theme skin.** The panel uses the host's own tokens
+(`--dsw-alias-bg-layer-1`, `--dsw-alias-label-primary`, …).
+
+## Build & development
 
 ```bash
-npm run build     # copies src/host + src/client into lib/ (no transpile needed)
-npm run watch     # rebuild lib/ on src/ change
-npm test          # parser regression suite
+npm run build      # assemble lib/ from src/
+npm run watch      # rebuild on change
+npm test           # 12 unit and contract suites
+npm run verify     # evaluate lib/client.js headlessly, as the loader does
+npm run test:writes # drive the write tools against campaigns/stage2-test
+npm run check      # all of the above
 ```
 
-The published package is the `lib/` output plus `cordis.patch.yml` (git-ignored
-until `build` runs). Host modules and the Client panel are plain ESM — no TS/JSX.
+`lib/` is committed. A `link:` install needs no build step, and `lib/` is what
+pnpm resolves.
 
----
+Source layout:
+
+```
+src/host/index.mjs          coordinator: mounts every tool family and the routes
+src/host/routes.mjs         GET /dnd/characters, GET /dnd/health
+src/host/tools/*.mjs        one module per domain, each exporting buildTools(ctx)
+src/client/index.js         factory-body entry (no ESM: it is pasted into the loader)
+src/client/panels/*.js      one file per panel
+```
+
+`src/client/**` is **not** an ES module. It is pasted inside
+`window.__ModuleLoader__.load({ id, factory })`, so it may not use `import` or
+`export` and may only `require('react')`. `scripts/build.mjs` enforces this at
+build time.
+
+### Testing notes
+
+- The Client half is verified **behaviourally**: `scripts/verify-client.mjs`
+  stubs a DOM and a React, runs the built bundle, and walks the rendered element
+  tree — so a render bug fails the build rather than blanking a panel.
+- Refusal tests compare **file hashes**, not re-read values. "The file must not
+  change" is a claim about bytes; re-reading through the same parser would agree
+  with itself.
+- All write tests run in the throwaway `campaigns/stage2-test`. The active
+  campaign marker is repointed for the run and restored in a `finally`, read and
+  written as bytes.
+- `test/tool-args.test.mjs` calls **every** tool with no arguments and asserts
+  none of them reports a result computed from a missing value.
 
 ## Design notes
 
-- **Plane rule.** The Host modules consume `fs` and `tools` from the **host**
-  registries, so they sit as plain rows outside any `isolate` realm. The Client
-  panel is delivered by `dsh.client` (persistent, no per-session `cordis_run`).
-- **Data stays live.** The Host reads only leaf fields and returns compact plain
-  JSON; nothing serializes Cordis/DSH live objects.
-- **RPC channel.** The panel's `host.call('dnd.characters')` is wired through
-  `harness.handle` when present. If your profile exposes RPC differently, adjust
-  `lib/host/dnd-sheet.mjs`'s `dnd.characters` handler to your host's channel.
-- **Skill remains authoritative.** `dice.py`/`xp.py`/`tracker.py`/`calendar.py`
-  in the D&D skill are the fallback for full stateful bookkeeping; these tools are
-  the lightweight native path for the common table operations.
+- **Plane rule.** The Host modules consume `fs` and `tools` from the host
+  registries, so they mount as plain rows outside any `isolate` realm. `tools`
+  is the only hard dependency; `fs` is read lazily per call, so a filesystem
+  outage cannot take down the six pure dice tools.
+- **`webServer` is reached through `ctx.inject(['webServer'], cb)`, never
+  declared in `inject`.** Declaring it would make a headless run fail to mount
+  the plugin's whole purpose. Registering from the scoped context is also
+  load-bearing: `ctx.effect` on the outer context registers nothing, silently.
+- **Reads never write.** The panel polls; if reading could write, every page
+  view would be a filesystem mutation.
+- **No security layer.** The deployment binds `127.0.0.1` by default, this is a
+  single-user local plugin, and if LAN exposure were ever wanted the fix belongs
+  to the bind address rather than to each route. The one retained protection is
+  the `register()` disposer being owned by `ctx.effect`, because a duplicate
+  `(kind, path)` throws on reload.
+- **The `dnd` skill at `.agents/skills/dnd/` is reference only.** It documents
+  the authoritative data formats, which this bundle follows, but the plugin does
+  not call its scripts.
 
----
-
-## Releasing & versioning (git)
-
-This repository is a git-managed release source. The published bundle is the
-`lib/` build + manifest above; bump the version for each release.
-
-```bash
-npm run build
-npm version patch            # or minor / major — tags v0.1.x, updates version + CHANGELOG
-git push --tags              # publish to origin
-npm publish                  # optional — only if publishing to a public registry
-```
-
-- Host tool behavior that is only additive → `patch`.
-- Adding a tool/module without breaking existing ones → `minor`.
-- Breaking change (e.g. renaming a tool) → `major`.
-
-Local-only teams can skip `npm publish` entirely and install pinned git tags:
+## Releasing
 
 ```bash
-dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle
+npm run check                     # must be green
+# bump "version" in package.json and add a CHANGELOG entry
+git commit -am "release: vX.Y.Z"
+git tag vX.Y.Z
+git push --tags
 ```
 
-## Adding a panel (future)
-
-Append an entry to `PANELS` in `lib/client.js`:
-
-```js
-{
-  id: 'dnd-spellbook-panel',
-  actionId: 'dnd-spellbook-action',
-  label: () => '法术',
-  renderAction: (props) => React.createElement(SpellbookAction, props),
-  renderOverlay: () => React.createElement(SpellbookOverlay, null),
-}
-```
-
-and add the matching Host data handler. No skin, no Host rewrite.
-
----
+`lib/` is committed, so a release tag is directly installable with `link:`.
+Additive tool behaviour is a `patch`; a new tool or panel is a `minor`; renaming
+or removing a tool is a `major`.
 
 ## License
 
