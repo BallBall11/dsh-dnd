@@ -67,7 +67,7 @@ const ALICE = {
     armour: {},
     gear: { Spellbook: 1, Robe: 1, Parchment: 8 },
   },
-  currency: { gp: 8, sp: 0, cp: 0 },
+  currency: 800,
   warnings: [],
 }
 
@@ -234,6 +234,29 @@ test('statesEqual compares canonically', () => {
   for (const k of Object.keys(ALICE).reverse()) shuffled[k] = ALICE[k]
   assert.ok(statesEqual(ALICE, shuffled))
   assert.ok(!statesEqual(ALICE, { ...ALICE, name: 'Bob' }))
+})
+
+// --- money is one integer -------------------------------------------------
+test('currency is a single copper total', () => {
+  assert.equal(normalizeState({ currency: 785 }).currency, 785)
+  assert.equal(typeof normalizeState({ currency: 785 }).currency, 'number')
+})
+
+test('a legacy {gp,sp,cp} triple folds into a total', () => {
+  // An unmigrated file keeps its value rather than losing it.
+  assert.equal(normalizeState({ currency: { gp: 7, sp: 8, cp: 5 } }).currency, 785)
+  assert.equal(normalizeState({ currency: { gp: 8, sp: 0, cp: 0 } }).currency, 800)
+})
+
+test('a legacy triple with a negative unit still totals correctly', () => {
+  // The old build could write this; it is arithmetically 785 cp.
+  assert.equal(normalizeState({ currency: { gp: 8, sp: 0, cp: -15 } }).currency, 785)
+})
+
+test('currency is never serialized as an object', () => {
+  const text = serializeState({ name: 'X', currency: 785 })
+  assert.match(text, /"currency": 785/, text)
+  assert.ok(!text.includes('"gp"'), 'no denominations in storage')
 })
 
 test('unknown top-level fields are dropped rather than serialized', () => {

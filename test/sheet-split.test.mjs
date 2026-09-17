@@ -315,9 +315,9 @@ test('extracts equipment as name -> quantity', () => {
   assert.deepEqual(state.equipment.armour, {}, '*(none)* is not an item')
 })
 
-test('extracts currency', () => {
+test('extracts currency as a single copper total', () => {
   const { state } = splitSheet(ALICE)
-  assert.deepEqual(state.currency, { gp: 8, sp: 0, cp: 0 })
+  assert.equal(state.currency, 800, 'money is stored as one integer, not three fields')
 })
 
 test('extracts spellcasting stats', () => {

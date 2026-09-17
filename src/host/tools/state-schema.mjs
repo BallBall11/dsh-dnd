@@ -70,7 +70,6 @@ const NESTED_ORDER = {
   spellcasting: ['ability', 'saveDC', 'attackBonus'],
   spells: ['cantrips', 'spellbook', 'prepared'],
   equipment: ['weapons', 'armour', 'gear'],
-  currency: ['gp', 'sp', 'cp'],
 }
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -87,7 +86,6 @@ const NUMERIC_FIELDS = new Set([
   'combat.hitDice.remaining',
   'combat.deathSaves.successes', 'combat.deathSaves.failures',
   'spellcasting.saveDC', 'spellcasting.attackBonus',
-  'currency.gp', 'currency.sp', 'currency.cp',
 ])
 
 /** Sub-objects that must always exist, so consumers need no null-check. */
@@ -104,7 +102,7 @@ const ALWAYS_PRESENT = {
   combat: () => ({ hp: { current: null, max: null }, hitDice: { die: null, remaining: null }, deathSaves: { successes: 0, failures: 0 } }),
   spellcasting: () => ({ ability: null, saveDC: null, attackBonus: null }),
   identity: () => ({ race: null, class: null, level: null, background: null, alignment: null, xp: null, xpNext: null }),
-  currency: () => ({ gp: 0, sp: 0, cp: 0 }),
+  currency: () => 0,
 }
 
 /**
@@ -241,6 +239,25 @@ export function normalizeState(state) {
         if (isPlainObject(source[bucket])) equipment[bucket] = { ...source[bucket] }
       }
       out.equipment = equipment
+      continue
+    }
+
+    if (key === 'currency') {
+      // Money is one copper total, never three fields. Storing denominations
+      // invites updating one of them, which is how `8 gp 0 sp 0 cp` minus
+      // `15 cp` became `8 gp 0 sp -15 cp` — a form no character holds. With a
+      // single integer there is no intermediate state to be caught in.
+      // Denominations are produced for display by state-rules.formatCurrency.
+      if (isPlainObject(value)) {
+        // A legacy `{gp,sp,cp}` triple is folded into a total on read, so an
+        // unmigrated file keeps its value rather than losing it.
+        const gp = numOrNull(value.gp) ?? 0
+        const sp = numOrNull(value.sp) ?? 0
+        const cp = numOrNull(value.cp) ?? 0
+        out.currency = Math.trunc(gp * 100 + sp * 10 + cp)
+      } else {
+        out.currency = numOrNull(value)
+      }
       continue
     }
 

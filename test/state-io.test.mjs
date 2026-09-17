@@ -172,7 +172,7 @@ await test('derives the full state from an unmigrated sheet', async () => {
   assert.equal(state.attacks[0].name, '电爪 Shocking Grasp')
   assert.deepEqual(state.spellSlots, { 1: { total: 2, used: 0 } })
   assert.equal(state.equipment.weapons['Quarterstaff (Sage)'], 1)
-  assert.deepEqual(state.currency, { gp: 8, sp: 0, cp: 0 })
+  assert.equal(state.currency, 800, 'money is stored as one integer, not three fields')
 })
 
 await test('reading does not create any file', async () => {
@@ -366,6 +366,78 @@ await test('listing sees a state file with no sheet', async () => {
   writeFileSync(statePath(dir, 'orphan').replace(/\//g, path.sep), '{"schema":1,"name":"Orphan"}', 'utf8')
   const listed = await listCharacters(fs, dir)
   assert.ok(listed.some((c) => c.name === 'orphan' && c.hasStateFile), JSON.stringify(listed))
+})
+
+// --- refusing to write an impossible state --------------------------------
+// Clamping would be worse than the bug: a DM reading a plausible number has no
+// way to learn the character was in an impossible state. A refused write is
+// visible; a silently repaired one is not.
+
+await test('a write with more slots expended than exist is refused', async () => {
+  const c = await readCharacter(fs, dir, 'alice')
+  const before = readFileSync(statePath(dir, 'alice').replace(/\//g, path.sep), 'utf8')
+  const result = await writeCharacter(fs, dir, 'alice', {
+    state: { ...c.state, spellSlots: { 1: { total: 2, used: 5 } } },
+    narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'),
+  })
+  assert.equal(result.refused, true)
+  assert.match(result.reason, /more than the character has/)
+  const after = readFileSync(statePath(dir, 'alice').replace(/\//g, path.sep), 'utf8')
+  assert.equal(after, before, 'a refused write must touch nothing')
+})
+
+await test('a write with a negative purse is refused', async () => {
+  const c = await readCharacter(fs, dir, 'alice')
+  const result = await writeCharacter(fs, dir, 'alice', {
+    state: { ...c.state, currency: -15 },
+    narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'),
+  })
+  assert.equal(result.refused, true)
+  assert.match(result.reason, /negative coin/)
+})
+
+await test('a refused write still reports what was wrong', async () => {
+  const c = await readCharacter(fs, dir, 'alice')
+  const result = await writeCharacter(fs, dir, 'alice', {
+    state: { ...c.state, combat: { ...c.state.combat, hp: { current: 99, max: 8 } } },
+    narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'),
+  })
+  assert.equal(result.refused, true)
+  assert.ok(result.findings.some((f) => f.field === 'combat.hp.current' && f.level === 'error'))
+  assert.ok(result.warnings.length > 0, 'the reason must reach the caller as a warning')
+})
+
+await test('strict:false allows a write and reports the findings', async () => {
+  // For importing an existing sheet that is already in a doubtful state:
+  // refusing would make it impossible to store what is actually on the page.
+  const c = await readCharacter(fs, dir, 'alice')
+  const result = await writeCharacter(fs, dir, 'alice', {
+    state: { ...c.state, currency: -15 },
+    narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'), strict: false,
+  })
+  assert.equal(result.refused, false)
+  assert.ok(result.findings.length > 0, 'the problem is still reported')
+
+  // Restore a valid state, so a later test does not inherit the deliberate one.
+  await writeCharacter(fs, dir, 'alice', {
+    state: { ...c.state, currency: 800 },
+    narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'),
+  })
+})
+
+await test('a valid write is not refused and reports no errors', async () => {
+  const c = await readCharacter(fs, dir, 'alice')
+  const result = await writeCharacter(fs, dir, 'alice', {
+    state: c.state, narrative: c.narrative, campaign: c.metadata.campaign, player: c.metadata.player,
+    calendar: CALENDAR, now: new Date('2026-09-15T12:00:00Z'),
+  })
+  assert.equal(result.refused, false)
+  assert.ok(!result.findings.some((f) => f.level === 'error'), JSON.stringify(result.findings))
 })
 
 // --- the real sheet, read-only --------------------------------------------

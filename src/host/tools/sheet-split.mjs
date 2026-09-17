@@ -51,6 +51,7 @@ import {
 } from './state-schema.mjs'
 import { parseFrontmatter, renderFrontmatter } from './frontmatter.mjs'
 import { METADATA_ORDER } from './clock.mjs'
+import { parseCurrency as parseCoins, formatCurrency } from './state-rules.mjs'
 
 /** Sections parsed into fields. Everything else is preserved as text. */
 export const STRUCTURED_SECTIONS = [
@@ -509,15 +510,16 @@ function parseEquipment(sections) {
   return out
 }
 
-/** `"8 gp 0 sp 0 cp"` -> `{ gp: 8, sp: 0, cp: 0 }`. */
+/**
+ * `"8 gp 0 sp 0 cp"` -> `800` (a copper total).
+ *
+ * Money is stored as one integer, so this delegates to the single parser in
+ * state-rules rather than re-implementing it — two parsers would drift, and
+ * the whole point of the integer is that there is nothing to drift.
+ */
 function parseCurrency(value) {
-  const out = { gp: 0, sp: 0, cp: 0 }
-  if (value === null || value === undefined) return out
-  for (const [unit] of Object.entries(out)) {
-    const m = String(value).match(new RegExp(`(\\d+)\\s*${unit}`, 'i'))
-    if (m !== null) out[unit] = parseInt(m[1], 10)
-  }
-  return out
+  if (value === null || value === undefined) return 0
+  return parseCoins(value)
 }
 
 /**
@@ -555,7 +557,7 @@ export function renderSummaryBlock(state) {
     `> HP ${hp} · AC ${ac} · Init ${s.combat.initiative ?? '—'} · Speed ${s.combat.speed ?? '—'}`,
     `> ${['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].map(ab).join(' · ')}`,
     `> 法术位 ${slots}${s.spellcasting.saveDC !== null ? ` · 法术DC ${s.spellcasting.saveDC}` : ''}${s.spellcasting.attackBonus !== null ? ` · 法术攻击 ${s.spellcasting.attackBonus >= 0 ? '+' : ''}${s.spellcasting.attackBonus}` : ''}`,
-    `> 💰 ${s.currency.gp} gp ${s.currency.sp} sp ${s.currency.cp} cp`,
+    `> 💰 ${formatCurrency(s.currency)}`,
     SUMMARY_CLOSE,
   ]
   return lines.join('\n')
