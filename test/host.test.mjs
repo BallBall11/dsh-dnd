@@ -114,6 +114,9 @@ const ctx = {
     if (name === 'logger') return { warn: (m) => warnings.push(m) }
     return undefined
   },
+  // This mount has no web server, so the route callback never fires. Cordis
+  // always supplies `inject`; only the service can be absent.
+  inject() {},
 }
 
 const host = await import('../src/host/index.mjs')
@@ -304,6 +307,7 @@ await test('fs-backed tools work when fs appears AFTER apply()', async () => {
       if (name === 'tools') return { register: (t) => { late.push(t); return () => {} } }
       return undefined
     },
+    inject() {},
   }
 
   const mod = await import('../src/host/index.mjs?late-fs')
@@ -349,6 +353,10 @@ await test('a missing webServer does not stop the tools from registering', async
       if (name === 'fs') return fsService
       return undefined
     },
+    // Cordis always provides `inject`; when the service never appears, the
+    // callback simply never runs. That is the headless case: no web server,
+    // no routes, and the tools unaffected.
+    inject(_deps, _cb) { /* service absent, callback never fires */ },
   }
   const mod = await import('../src/host/index.mjs?no-webserver')
   const dispose = mod.apply(ctxNoWeb)
@@ -356,43 +364,69 @@ await test('a missing webServer does not stop the tools from registering', async
   assert.equal(late.length, 11, 'all 11 tools must still register without a web server')
 })
 
-await test('routes are registered through ctx.effect when webServer exists', async () => {
+/** A ctx whose inject() delivers a scoped child context, as Cordis does. */
+function makeWebCtx({ register } = {}) {
   const mounted = []
-  const effects = []
-  const ctxWithWeb = {
+  const registerImpl = register ?? ((r) => { mounted.push(r.path); return () => { mounted.splice(mounted.indexOf(r.path), 1) } })
+  const webCtx = {
+    get: (n) => (n === 'webServer' ? { register: registerImpl } : n === 'fs' ? fsService : undefined),
+    effect(fn) {
+      const result = fn()
+      // A fiber effect may only be a function, nullish or an iterable.
+      assert.ok(typeof result === 'function' || result === null || result === undefined,
+        'the effect must return a legal value, got ' + typeof result)
+      return () => {}
+    },
+  }
+  const ctx = {
+    injected: [],
     get(name) {
       if (name === 'tools') return { register: () => () => {} }
       if (name === 'fs') return fsService
-      if (name === 'webServer') {
-        return { register: (r) => { mounted.push(r.path); return () => { mounted.splice(mounted.indexOf(r.path), 1) } } }
-      }
+      // The outer context deliberately has NO webServer: reaching for it here
+      // is the bug this test guards.
       return undefined
     },
-    effect(fn) { effects.push(fn()) },
+    inject(deps, cb) {
+      ctx.injected.push(...deps)
+      if (deps.includes('webServer')) cb(webCtx)
+    },
   }
-  const mod = await import('../src/host/index.mjs?webserver')
-  mod.apply(ctxWithWeb)
-  assert.ok(effects.every((e) => typeof e === 'function' || e === null),
-    'every effect must be a function/nullish, or the fiber rejects it')
+  return { ctx, mounted, webCtx }
+}
+
+await test('routes mount through ctx.inject, not through the outer context', async () => {
+  const { ctx, mounted } = makeWebCtx()
+  const mod = await import('../src/host/index.mjs?inject-routes')
+  mod.apply(ctx)
+  assert.deepEqual(ctx.injected, ['webServer'], 'webServer must be requested by name')
   assert.ok(mounted.includes('/dnd/characters'), JSON.stringify(mounted))
   assert.ok(mounted.includes('/dnd/health'), JSON.stringify(mounted))
 })
 
-await test('ctx.effect is optional, not assumed', async () => {
-  // A ctx without `effect` must fall back to holding the disposer rather than
-  // throwing away the tools.
-  const mounted = []
-  const ctxPlain = {
-    get(name) {
-      if (name === 'tools') return { register: () => () => {} }
-      if (name === 'fs') return fsService
-      if (name === 'webServer') return { register: (r) => { mounted.push(r.path); return () => {} } }
-      return undefined
-    },
+await test('the outer context is never asked for webServer directly', async () => {
+  // The original defect: `ctx.get('webServer')` on a context that does not
+  // declare the dependency returns undefined, `mountRoutes` bailed out, and
+  // the panel 404'd with an empty body while every log line looked healthy.
+  const asked = []
+  const { webCtx } = makeWebCtx()
+  const ctx = {
+    get(name) { asked.push(name); return name === 'tools' ? { register: () => () => {} } : name === 'fs' ? fsService : undefined },
+    inject(deps, cb) { if (deps.includes('webServer')) cb(webCtx) },
   }
-  const mod = await import('../src/host/index.mjs?no-effect')
-  assert.doesNotThrow(() => mod.apply(ctxPlain))
-  assert.ok(mounted.length > 0, 'routes should still mount')
+  const mod = await import('../src/host/index.mjs?outer-ctx')
+  mod.apply(ctx)
+  assert.ok(!asked.includes('webServer'),
+    'webServer must come from the injected child context; asking the outer one silently yields undefined')
+})
+
+await test('a throwing register surfaces instead of being swallowed', async () => {
+  // register() throws on a duplicate (kind, path). Swallowing that hid the
+  // original failure behind a 404 and an empty body.
+  const { ctx } = makeWebCtx({ register: () => { throw new Error('webserver: duplicate exact route "/dnd/characters"') } })
+  const mod = await import('../src/host/index.mjs?throw-route')
+  assert.throws(() => mod.apply(ctx), /duplicate exact route/,
+    'a route collision must be visible, not logged and ignored')
 })
 
 console.log('')

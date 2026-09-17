@@ -178,12 +178,25 @@ function sendJson(res, status, body) {
 /**
  * Mount every route.
  *
- * @param ctx - the host context.
+ * @param ctx - a context that HAS `webServer` in scope. The outer context of a
+ *   plugin that does not declare `webServer` in `inject` will not have it; use
+ *   `ctx.inject(['webServer'], (webCtx) => mountRoutes(webCtx))` and pass the
+ *   callback's scoped context.
  * @returns a disposer removing every route registered here.
+ * @throws when `webServer` is unavailable. Returning null here is what hid a
+ *   broken panel for an entire debugging session: the caller could not tell
+ *   "no web server in this run" from "registration failed", and the symptom —
+ *   a 404 with an empty body — looked like a routing mistake rather than a
+ *   wiring one.
  */
 export function mountRoutes(ctx) {
   const webServer = ctx.get('webServer')
-  if (webServer === undefined) return null
+  if (webServer === undefined) {
+    throw new Error(
+      'dsh-dnd: webServer is not in scope. Mount routes from '
+      + "ctx.inject(['webServer'], (webCtx) => mountRoutes(webCtx)), not from the outer context.",
+    )
+  }
 
   const handlers = buildHandlers(ctx)
   const disposers = []

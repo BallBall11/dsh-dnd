@@ -318,10 +318,21 @@ await test('the mount disposer removes every route', () => {
     'every route must be removable: a duplicate (kind,path) throws on reload')
 })
 
-await test('mountRoutes returns null when webServer is absent', () => {
-  // A headless run has no web server. Returning null rather than a bogus
-  // disposer keeps ctx.effect honest.
-  assert.equal(mountRoutes({ get: () => undefined }), null)
+await test('mountRoutes throws when webServer is absent', () => {
+  // Returning null was the bug: the caller could not tell "no web server in
+  // this run" from "registration failed", and the symptom was a 404 with an
+  // empty body that looked like a routing mistake rather than a wiring one.
+  assert.throws(() => mountRoutes({ get: () => undefined }), /webServer is not in scope/)
+})
+
+await test('the error names the fix, not just the fault', () => {
+  try {
+    mountRoutes({ get: () => undefined })
+    assert.fail('expected a throw')
+  } catch (error) {
+    assert.match(error.message, /ctx\.inject\(\['webServer'\]/,
+      'the message must say where to mount from, since the wrong ctx is the whole trap')
+  }
 })
 
 await test('a duplicate route registration throws, which is why disposers matter', () => {
