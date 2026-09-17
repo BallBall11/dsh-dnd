@@ -1,11 +1,38 @@
-window.__ModuleLoader__.load({ id: "dsh-dnd", factory: (require) => {
-var module = { exports: {} }; var exports = module.exports;
-var __frag_panels_character = (function () {
- 
+/**
+ * panels/character.js — the character panel.
+ *
+ * Authored as a factory-body fragment, NOT an ES module: this file is pasted
+ * inside `window.__ModuleLoader__.load({ id, factory })` by scripts/build.mjs,
+ * so it may not use `export` / `import`. It ends by returning the module
+ * exports, which build.mjs wires into the IIFE fragment table.
+ *
+ * ## Where the data comes from
+ *
+ * `fetch('/dnd/characters')`, served by src/host/routes.mjs. A bundle cannot
+ * use `host.call` — that path needs a pluginId and pluginRunId the dynamic
+ * runner owns — so HTTP is the only transport available to us.
+ *
+ * ## What this panel deliberately does
+ *
+ * It renders what the Host sends and formats almost nothing itself. Money
+ * arrives pre-formatted as `display.currency`, and validation findings arrive
+ * as strings. Recomputing either here would give two places to drift, and the
+ * one the DM reads would be the one that is wrong.
+ *
+ * It shows problems. A character whose state is impossible renders with the
+ * findings visible under it rather than being hidden, because the alternative
+ * is a DM reading a plausible number that is not true — the failure this whole
+ * project keeps running into.
+ *
+ * ## Deliberately absent for now
+ *
+ * Polling, editing and per-character detail views. Stage 3c is the read-only
+ * panel; live refresh and writes are 3d. One fetch per open, as in 3b.
+ */
 
 const React = require('react')
 
- 
+/** The Host route namespace, kept in sync by test/client-host-contract.test.mjs. */
 const DND_API = '/dnd'
 
 const CSS = `
@@ -46,7 +73,7 @@ const CSS = `
 .dnd-slot i{font-style:normal;color:var(--dsw-alias-label-secondary)}
 `
 
- 
+/** Inject the stylesheet once, keyed so a reload does not stack duplicates. */
 function ensureStyle() {
   if (typeof document === 'undefined') return undefined
   const existing = document.querySelector('style[data-plugin="dsh-dnd"]')
@@ -60,7 +87,7 @@ function ensureStyle() {
 
 const OPEN = { value: false, listeners: new Set() }
 
- 
+/** A tiny external store so the button and the overlay share one open flag. */
 function useOpen() {
   const [, force] = React.useState(0)
   React.useEffect(() => {
@@ -76,7 +103,7 @@ function setOpen(next) {
   for (const listener of OPEN.listeners) listener()
 }
 
- 
+/** Load the character list, once per open. Never throws into a render. */
 function useCharacters(open) {
   const [state, setState] = React.useState({ phase: 'idle', status: 0, body: null })
   React.useEffect(() => {
@@ -92,14 +119,14 @@ function useCharacters(open) {
   return state
 }
 
- 
+/** The modifier shown beside an ability score. */
 function modifier(score) {
   if (typeof score !== 'number') return '—'
   const mod = Math.floor((score - 10) / 2)
   return (mod >= 0 ? '+' : '') + mod
 }
 
- 
+/** Hit-point band: full-ish, hurt, or near death. */
 function hpBand(current, max) {
   if (typeof current !== 'number' || typeof max !== 'number' || max <= 0) return ''
   const ratio = current / max
@@ -147,7 +174,7 @@ function Slots({ slots }) {
       })))
 }
 
- 
+/** Findings arrive pre-formatted from the Host; errors are separated out. */
 function Findings({ findings }) {
   if (!Array.isArray(findings) || findings.length === 0) return null
   const errors = findings.filter((f) => f.startsWith('ERROR'))
@@ -215,7 +242,7 @@ function Character({ character }) {
     React.createElement(Findings, { findings: character.findings }))
 }
 
- 
+/** Render the transport result; every branch is an outcome a DM might hit. */
 function Body({ result }) {
   if (result.phase === 'loading') return React.createElement('div', { className: 'dnd-muted' }, '读取中…')
   if (result.phase !== 'done') return null
@@ -256,7 +283,7 @@ function Action(props) {
   }, React.createElement('span', null, '⚔'), wide ? React.createElement('span', null, 'D&D') : null)
 }
 
- 
+/** `shell.overlay` is click-through, so the panel opts back into pointer events. */
 function Overlay() {
   const open = useOpen()
   const result = useCharacters(open)
@@ -276,7 +303,10 @@ const PANELS = [
   { overlayId: 'dnd-character-overlay', actionId: 'dnd-character-action', order: 10 },
 ]
 
- 
+/**
+ * Register the character panel into both slots.
+ * @param ctx - the client context; `slots` is the only service used.
+ */
 function apply(ctx) {
   const slots = ctx.get('slots')
   if (slots === undefined) return
@@ -289,34 +319,8 @@ function apply(ctx) {
       { name: 'sidebar.footer.action', id: panel.actionId, order: panel.order },
       (props) => React.createElement(Action, props)))
   }
-   
-  return () => {   }
+  // A fiber effect may be a function, nullish, or an iterable of disposers.
+  return () => { /* fiber-owned effects unwind automatically */ }
 }
 
 return { apply, inject: ['slots'] }
-
-})();
-
- 
-
- 
-const panelModules = [
-  __frag_panels_character,
-]
-
- 
-const inject = ['slots']
-
- 
-function apply(ctx) {
-  for (const panel of panelModules) {
-    if (panel === undefined || typeof panel.apply !== 'function') continue
-    panel.apply(ctx)
-  }
-   
-  return () => {   }
-}
-
-return { apply, inject }
-
-return module.exports; } });

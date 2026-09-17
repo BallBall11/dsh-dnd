@@ -16,7 +16,7 @@
 
 /** Panel registry. Adding a panel = wrapping one more fragment and listing it. */
 const panelModules = [
-  __frag_panels_smoke,
+  __frag_panels_character,
 ]
 
 /** Services every panel needs before it can register anything. */
