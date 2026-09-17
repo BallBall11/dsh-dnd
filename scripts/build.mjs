@@ -111,17 +111,126 @@ if (!clientFiles.includes(CLIENT_ENTRY)) {
   throw new Error(`build: src/client/${CLIENT_ENTRY} is required (the client entry)`)
 }
 
+/**
+ * Strip comments from a client source body.
+ *
+ * The client half ships to the browser, and the sources are commentary-heavy
+ * on purpose — they explain contract decisions that are not visible in the
+ * code. That prose is worth keeping in `src/` and worth nothing in the bundle:
+ * measured at 41% of the emitted bytes, all of it parsed and discarded on
+ * every page load.
+ *
+ * This is a scanner rather than a regex, because a regex cannot tell a comment
+ * from the same characters inside a string or a regex literal, and getting
+ * that wrong corrupts the shipped file. It tracks:
+ *
+ *   - single/double/backtick strings, with escapes and `${}` nesting
+ *   - regex literals, distinguished from division by the previous token
+ *
+ * Comments become a single space, never nothing, so `a/*x*​/b` cannot silently
+ * become `ab`.
+ *
+ * @param code - a client source file.
+ * @returns the same code with comments removed.
+ */
+function stripComments(code) {
+  let out = ''
+  let i = 0
+  /** The last significant character, used to tell a regex from a divide. */
+  let prev = ''
+  while (i < code.length) {
+    const ch = code[i]
+    const next = code[i + 1]
+
+    // Strings, including template literals with their `${}` substitutions.
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch
+      out += ch
+      i += 1
+      while (i < code.length) {
+        const c = code[i]
+        if (c === '\\') { out += code[i] + (code[i + 1] ?? ''); i += 2; continue }
+        if (c === quote) { out += c; i += 1; break }
+        // A `${` inside a template opens an expression; recurse so a comment
+        // inside the substitution is handled rather than swallowed.
+        if (quote === '`' && c === '$' && code[i + 1] === '{') {
+          out += '${'
+          i += 2
+          let depth = 1
+          let expr = ''
+          while (i < code.length && depth > 0) {
+            if (code[i] === '{') depth += 1
+            else if (code[i] === '}') { depth -= 1; if (depth === 0) break }
+            expr += code[i]
+            i += 1
+          }
+          out += stripComments(expr)
+          out += '}'
+          i += 1
+          continue
+        }
+        out += c
+        i += 1
+      }
+      prev = quote
+      continue
+    }
+
+    // Line comment.
+    if (ch === '/' && next === '/') {
+      while (i < code.length && code[i] !== '\n') i += 1
+      out += ' '
+      continue
+    }
+    // Block comment.
+    if (ch === '/' && next === '*') {
+      i += 2
+      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i += 1
+      i += 2
+      out += ' '
+      continue
+    }
+    // Regex literal: a `/` that follows something expecting an operand. A `/`
+    // after an identifier, `)`, `]` or a number is division instead.
+    if (ch === '/' && !/[\w$)\]]$/.test(prev)) {
+      out += ch
+      i += 1
+      let inClass = false
+      while (i < code.length) {
+        const c = code[i]
+        if (c === '\\') { out += code[i] + (code[i + 1] ?? ''); i += 2; continue }
+        if (c === '[') inClass = true
+        else if (c === ']') inClass = false
+        else if (c === '/' && !inClass) { out += c; i += 1; break }
+        else if (c === '\n') break
+        out += c
+        i += 1
+      }
+      while (i < code.length && /[a-z]/.test(code[i])) { out += code[i]; i += 1 }
+      prev = '/'
+      continue
+    }
+
+    out += ch
+    if (!/\s/.test(ch)) prev = ch
+    i += 1
+  }
+  return out
+}
+
 const fragments = []
 for (const rel of clientFiles) {
   if (rel === CLIENT_ENTRY) continue
   // panels/foo.js -> __panel_foo ; helpers/bar.js -> __helpers_bar
   const local = '__frag_' + rel.replace(/\.js$/, '').replace(/[^a-zA-Z0-9]/g, '_')
-  const body = await readFile(path.join(srcClient, rel), 'utf8')
+  const raw = await readFile(path.join(srcClient, rel), 'utf8')
+  const body = stripComments(raw)
   fragments.push(`var ${local} = (function () {\n${body}\n})();`)
-  console.log('client ->', 'fragment', rel, 'as', local)
+  console.log('client ->', 'fragment', rel, 'as', local, `(${raw.length} -> ${body.length} bytes)`)
 }
 
-const entryBody = await readFile(path.join(srcClient, CLIENT_ENTRY), 'utf8')
+const entryRaw = await readFile(path.join(srcClient, CLIENT_ENTRY), 'utf8')
+const entryBody = stripComments(entryRaw)
 const clientOut = wrapClientModule([...fragments, entryBody].join('\n\n'))
 
 await writeFile(path.join(lib, 'client.js'), clientOut)
