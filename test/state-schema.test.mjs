@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict'
 import {
   SCHEMA_VERSION,
+  MAX_APPLIED_KEYS,
   normalizeState,
   serializeState,
   parseState,
@@ -262,6 +263,76 @@ test('currency is never serialized as an object', () => {
 test('unknown top-level fields are dropped rather than serialized', () => {
   const s = normalizeState({ name: 'X', bogusField: 'nope' })
   assert.equal('bogusField' in s, false, 'a typo should surface as an absent value')
+})
+
+// --- fields the write tools depend on -------------------------------------
+//
+// Both of these were dropped silently when they were first added to track.mjs:
+// the schema keeps only the fields in TOP_LEVEL_ORDER, so a new field that is
+// not listed there disappears on write while the tool reports success. That is
+// the most expensive shape of bug in this project — a plausible-looking report
+// over data that did not move — so each is asserted explicitly.
+
+test('conditions persist and are deduplicated', () => {
+  const s = normalizeState({ name: 'X', conditions: ['prone', 'poisoned', 'prone', '  '] })
+  assert.deepEqual(s.conditions, ['prone', 'poisoned'])
+})
+
+test('conditions survive a serialize round trip', () => {
+  const text = serializeState({ name: 'X', conditions: ['prone', 'restrained'] })
+  const back = parseState(text).state
+  assert.deepEqual(back.conditions, ['prone', 'restrained'])
+})
+
+test('conditions default to an empty array, never undefined', () => {
+  // A consumer reading `state.conditions.length` must not throw on a character
+  // that has never been affected by anything.
+  assert.deepEqual(normalizeState({ name: 'X' }).conditions, [])
+})
+
+test('non-string conditions are dropped', () => {
+  const s = normalizeState({ name: 'X', conditions: ['prone', 7, null, { a: 1 }] })
+  assert.deepEqual(s.conditions, ['prone'])
+})
+
+test('appliedKeys persist, deduplicate and cap', () => {
+  const s = normalizeState({ name: 'X', appliedKeys: ['a', 'a', 'b'] })
+  assert.deepEqual(s.appliedKeys, ['a', 'b'])
+
+  const many = Array.from({ length: MAX_APPLIED_KEYS + 10 }, (_, i) => `k${i}`)
+  const capped = normalizeState({ name: 'X', appliedKeys: many }).appliedKeys
+  assert.equal(capped.length, MAX_APPLIED_KEYS, 'the list must stay bounded')
+  // The newest are kept: a retry arrives seconds after the call it repeats.
+  assert.equal(capped[capped.length - 1], `k${MAX_APPLIED_KEYS + 9}`)
+})
+
+test('appliedKeys survive a round trip, so a retry is caught after a restart', () => {
+  const text = serializeState({ name: 'X', appliedKeys: ['session-4'] })
+  assert.deepEqual(parseState(text).state.appliedKeys, ['session-4'])
+})
+
+test('the write tools can reach every field they mutate', () => {
+  // The guard against the silent-drop class of bug: every field track.mjs
+  // writes must survive normalization. A new field added to the tool without
+  // adding it here fails this test rather than failing in front of a DM.
+  const s = normalizeState({
+    name: 'X',
+    combat: { hp: { current: 1, max: 8 }, tempHp: 3 },
+    spellSlots: { 1: { total: 2, used: 1 } },
+    identity: { level: 1, xp: 250, xpNext: 300 },
+    equipment: { gear: { Rations: 4 } },
+    currency: 785,
+    conditions: ['prone'],
+    appliedKeys: ['k'],
+  })
+  assert.equal(s.combat.tempHp, 3, 'tempHp')
+  assert.equal(s.combat.hp.current, 1, 'hp.current')
+  assert.equal(s.spellSlots['1'].used, 1, 'spellSlots used')
+  assert.equal(s.identity.xp, 250, 'xp')
+  assert.equal(s.equipment.gear.Rations, 4, 'gear quantity')
+  assert.equal(s.currency, 785, 'currency')
+  assert.deepEqual(s.conditions, ['prone'], 'conditions')
+  assert.deepEqual(s.appliedKeys, ['k'], 'appliedKeys')
 })
 
 console.log('')

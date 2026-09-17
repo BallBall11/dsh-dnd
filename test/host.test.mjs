@@ -130,7 +130,7 @@ await test('apply() registers every family', async () => {
   const expected = [
     'dnd_arc_status', 'dnd_attack', 'dnd_campaign_search', 'dnd_campaign_state',
     'dnd_character_get', 'dnd_check', 'dnd_dc', 'dnd_mastery', 'dnd_roll',
-    'dnd_save', 'dnd_srd_lookup',
+    'dnd_save', 'dnd_spend', 'dnd_srd_lookup', 'dnd_track', 'dnd_xp_add',
   ]
   assert.deepEqual(names, expected, 'registered roster drifted:\n  got      ' + names.join(', ') + '\n  expected ' + expected.join(', '))
   assert.deepEqual(warnings, [], 'no family should have failed: ' + warnings.join('; '))
@@ -315,7 +315,7 @@ await test('fs-backed tools work when fs appears AFTER apply()', async () => {
   assert.equal(typeof dispose, 'function')
 
   // Every tool registered even though fs is absent: nothing was gated on it.
-  assert.equal(late.length, 11, 'all 11 tools must register without fs; got ' + late.length)
+  assert.equal(late.length, 14, 'all 14 tools must register without fs; got ' + late.length)
 
   const before = late.find((t) => t.name === 'dnd_character_get')
   assert.match(String(await before.execute({ character: 'alice' })), /fs service unavailable/,
@@ -361,7 +361,7 @@ await test('a missing webServer does not stop the tools from registering', async
   const mod = await import('../src/host/index.mjs?no-webserver')
   const dispose = mod.apply(ctxNoWeb)
   assert.equal(typeof dispose, 'function')
-  assert.equal(late.length, 11, 'all 11 tools must still register without a web server')
+  assert.equal(late.length, 14, 'all 14 tools must still register without a web server')
 })
 
 /** A ctx whose inject() delivers a scoped child context, as Cordis does. */
