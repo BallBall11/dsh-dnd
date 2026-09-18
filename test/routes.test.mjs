@@ -15,6 +15,8 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, statSync }
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { API_PREFIX, ROUTES, buildHandlers, mountRoutes } from '../src/host/routes.mjs'
+import { activeCampaignDir } from '../src/host/tools/shared.mjs'
+import { readAllCharacters } from '../src/host/tools/state-io.mjs'
 
 let failures = 0
 async function test(name, fn) {
@@ -354,17 +356,43 @@ await test('a duplicate route registration throws, which is why disposers matter
 })
 
 // --- the real campaign, read-only ----------------------------------------
+//
+// The property is "THIS SUITE DOES NOT TOUCH THE REAL CAMPAIGN", not "the real
+// character happens to be unmigrated". The first version asserted that no
+// `.state.json` sat beside `alice.md` — a proxy that was true until that
+// character was migrated with the operator's consent, at which point it failed
+// while the actual invariant still held perfectly.
+//
+// Hashing both files and requiring them unchanged asserts the invariant itself,
+// and keeps holding however the campaign is stored.
 const REAL = 'D:/DND/campaigns/morgansfort/characters/alice.md'
-const realExists = (() => { try { return statSync(nodePath(REAL)).isFile() } catch { return false } })()
+const REAL_STATE = 'D:/DND/campaigns/morgansfort/characters/alice.state.json'
+const readIfPresent = (p) => { try { return readFileSync(nodePath(p)) } catch { return null } }
+const realExists = readIfPresent(REAL) !== null
 if (realExists) {
   await test('the real campaign is untouched by these tests', async () => {
-    const before = readFileSync(nodePath(REAL), 'utf8')
-    // The real tree has no .state.json beside alice.md; asserting that keeps
-    // a future test from quietly migrating it.
-    let hasState = true
-    try { statSync(nodePath('D:/DND/campaigns/morgansfort/characters/alice.state.json')) } catch { hasState = false }
-    assert.equal(hasState, false, 'no state file may be created for the real character')
-    assert.equal(readFileSync(nodePath(REAL), 'utf8'), before)
+    const sheetBefore = readIfPresent(REAL)
+    const stateBefore = readIfPresent(REAL_STATE)
+    assert.ok(sheetBefore !== null, 'the real sheet exists')
+
+    // Re-read through the character-listing path this suite exercises, then
+    // compare bytes. `makeFs` still resolves absolute paths, so this reads the
+    // real campaign directory — which is exactly what we want to prove is safe.
+    const realFs = makeFs()
+    const located = await activeCampaignDir(realFs)
+    assert.ok(located !== undefined, 'the real campaign is active for this check')
+    await readAllCharacters(realFs, `${located.dir}/characters`)
+
+    assert.ok(sheetBefore.equals(readIfPresent(REAL)), 'the real sheet must not change')
+    const stateAfter = readIfPresent(REAL_STATE)
+    assert.equal(
+      stateBefore === null ? null : stateBefore.length,
+      stateAfter === null ? null : stateAfter.length,
+      'the real state file must not change',
+    )
+    if (stateBefore !== null) {
+      assert.ok(stateBefore.equals(stateAfter), 'the real state file must be byte-identical')
+    }
   })
 }
 

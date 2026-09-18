@@ -110,12 +110,28 @@ function parseSkills(sectionText) {
   return out
 }
 
-/** Parse the Attacks table into rows of `{ name, bonus, damage, type }`. */
+/**
+ * Parse the Attacks table into rows of `{ name, bonus, damage, type, notes }`.
+ *
+ * All five columns the template defines are read. An earlier version stopped at
+ * column 3 and silently dropped Notes — which in the real sheet is not filler
+ * but the tactical text ("命中后目标至其下回合开始不能借机攻击"), the part a DM
+ * consults mid-combat. The state schema already had a `notes` field for it; the
+ * parser simply never filled it.
+ */
 function parseAttacks(sectionText) {
   const out = []
   for (const row of tableRows(sectionText, /^##\s*\/?Attacks/i, 1)) {
     if (/^Name$/i.test(row[0])) continue
-    out.push({ name: row[0], bonus: row[1] ?? '', damage: row[2] ?? '', type: row[3] ?? '' })
+    const notes = row[4] ?? ''
+    out.push({
+      name: row[0],
+      bonus: row[1] ?? '',
+      damage: row[2] ?? '',
+      type: row[3] ?? '',
+      // `*(none)*`, `—` and `-` all appear in real sheets as "no notes".
+      notes: /^(\*?\(?none\)?\*?|—|–|-|)$/i.test(notes.trim()) ? '' : notes,
+    })
   }
   return out
 }

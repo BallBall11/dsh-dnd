@@ -46,6 +46,24 @@ export function statePath(dir, name) {
   return `${dir}/${name}.state.json`
 }
 
+/**
+ * Is this a complaint that a structured section is absent from the sheet?
+ *
+ * Those warnings are correct for an unmigrated sheet and wrong for a migrated
+ * one, where the section's contents now live in `.state.json`. Matched by
+ * wording, which is brittle — but the alternative is threading a flag through
+ * the parser, and the wording is produced in one place. The phrases are kept
+ * deliberately specific so an unrelated future warning is not swallowed.
+ *
+ * @param warning - one warning string from the sheet parser.
+ */
+function isStructuralWarning(warning) {
+  return /No "## [A-Za-z &]+" section/.test(warning)
+    || /No ability-score table found/.test(warning)
+    || /No attack table found/.test(warning)
+    || /No skill table found/.test(warning)
+}
+
 /** `<dir>/<name>.md` */
 export function sheetPath(dir, name) {
   return `${dir}/${name}.md`
@@ -74,11 +92,23 @@ export async function readCharacter(fs, dir, name) {
   const sheet = sheetText !== undefined
     ? splitSheet(sheetText, { name })
     : { state: null, narrative: '', metadata: {}, title: null, sections: [], warnings: [] }
-  for (const w of sheet.warnings ?? []) warnings.push(w)
+
+  const hasStateFile = stateText !== undefined
+
+  // When a state file exists it is the authority, and the sheet is supposed to
+  // be narrative only — its structured sections have MOVED. Warning that
+  // "## Combat Stats" is missing would tell the DM their character is broken
+  // when the numbers are sitting in the file right next to it, correct. So
+  // structural warnings are dropped in that case; anything else the sheet
+  // parser reported (a malformed frontmatter block, unreadable prose) still
+  // surfaces, because the state file does not speak to those.
+  for (const w of sheet.warnings ?? []) {
+    if (hasStateFile && isStructuralWarning(w)) continue
+    warnings.push(w)
+  }
 
   let state = null
   let needsMigration = false
-  const hasStateFile = stateText !== undefined
 
   if (hasStateFile) {
     const parsed = parseState(stateText)

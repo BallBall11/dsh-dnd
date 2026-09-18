@@ -273,13 +273,24 @@ test('parses death saves', () => {
   assert.deepEqual(c.deathSaves, { success: 2, fail: 1 })
 })
 
-// --- the real sheet, read from disk --------------------------------------
+// --- the real sheet, read from a FROZEN fixture --------------------------
 // The synthetic fixtures above each matched a shape the code already handled.
-// This one parses the actual campaign file, so a parser that disagrees with
-// the real data fails here rather than in front of the DM mid-session.
-// Read-only: nothing is ever written back.
+// This one is the actual campaign file, so a parser that disagrees with the
+// real data fails here rather than in front of the DM mid-session.
+//
+// It reads a COMMITTED COPY, not the live campaign file. The first version read
+// `campaigns/morgansfort/characters/alice.md` directly, which coupled this
+// suite to a file the plugin itself migrates: once that character was migrated
+// its structured sections moved to `.state.json`, the sheet became narrative
+// only, and six assertions here failed — not because the parser broke, but
+// because the input it was pointed at was no longer the input it was written
+// for. A parser test must own its input.
+//
+// The fixture is byte-identical (sha256 91a90f00…) to the sheet as it was
+// before migration, so it keeps testing the format this parser exists to read.
 import { readFileSync, existsSync } from 'node:fs'
-const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md'
+const REAL_SHEET = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
+  .replace(/^\/([A-Za-z]:)/, '$1') // Windows: strip the leading slash from /D:/...
 
 if (existsSync(REAL_SHEET)) {
   const real = parseCharacterSheet(readFileSync(REAL_SHEET, 'utf8'))
@@ -316,6 +327,41 @@ if (existsSync(REAL_SHEET)) {
     assert.equal(real.attacks.length, 2)
     assert.ok(real.attacks.some((a) => a.name.includes('Shocking Grasp')), JSON.stringify(real.attacks))
     assert.ok(real.attacks.every((a) => a.bonus === '+5'), JSON.stringify(real.attacks))
+  })
+
+  test('the real sheet yields each attack\'s Notes, not just its numbers', () => {
+    // This column was silently dropped: the parser read four of the five
+    // columns the template defines, so the tactics text never reached the state
+    // file. It is not filler — it is what a DM consults mid-combat — and the
+    // schema already had a `notes` field waiting for it.
+    const grasp = real.attacks.find((a) => a.name.includes('Shocking Grasp'))
+    assert.ok(grasp.notes && grasp.notes.length > 0,
+      'Shocking Grasp has a Notes column in the real sheet: ' + JSON.stringify(grasp))
+    assert.match(grasp.notes, /借机攻击|opportunity/i, grasp.notes)
+
+    const frost = real.attacks.find((a) => a.name.includes('Ray of Frost'))
+    assert.ok(frost.notes && frost.notes.length > 0, JSON.stringify(frost))
+    assert.match(frost.notes, /速度|speed/i, frost.notes)
+  })
+
+  test('an explicit "none" in the Notes column reads as empty, not as a note', () => {
+    // Real sheets say `*(none)*`, `—` or `-` to mean "nothing here". Storing
+    // that text would put the word "none" in front of the DM as though it were
+    // a tactic.
+    const c = parseCharacterSheet([
+      '# Test',
+      '',
+      '## Attacks',
+      '| Name | Attack Bonus | Damage | Type | Notes |',
+      '|------|-------------|--------|------|-------|',
+      '| Dagger | +3 | 1d4 | Piercing | *(none)* |',
+      '| Sling | +3 | 1d4 | Bludgeoning | — |',
+      '| Staff | +3 | 1d6 | Bludgeoning | - |',
+      '',
+    ].join('\n'))
+    for (const a of c.attacks) {
+      assert.equal(a.notes, '', `${a.name} should have no note, got ${JSON.stringify(a.notes)}`)
+    }
   })
 
   test('the real sheet yields currency and cantrips', () => {

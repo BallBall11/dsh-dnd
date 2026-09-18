@@ -103,6 +103,13 @@ function resetFixture({ currency = 785, hp = 5, maxHp = 8, xp = 0, used = 1 } = 
 }
 
 const realBefore = sha(REAL)
+// The real character's state file may or may not exist, depending on whether
+// that character has been migrated. Snapshot whichever is true and require it
+// unchanged, rather than asserting one particular arrangement.
+const REAL_STATE = `${ROOT}/campaigns/morgansfort/characters/alice.state.json`
+const realStateExistedBefore = existsSync(nodePath(REAL_STATE))
+const realStateBefore = realStateExistedBefore ? sha(REAL_STATE) : null
+
 // Read and restore the marker as BYTES, not as text. `readFileSync(_, 'utf8')`
 // strips the BOM while decoding, so writing that string back silently removes
 // it — the file reads the same and is not the same file. This marker carries a
@@ -373,8 +380,18 @@ check(existsSync(nodePath(MARKER)), 'the active-campaign marker still exists')
 check(readFileSync(nodePath(MARKER)).equals(markerBefore), 'the marker was restored byte-for-byte, BOM included')
 check(JSON.parse(readFileSync(nodePath(MARKER), 'utf8').replace(/^\uFEFF/, '')).name === 'morgansfort',
   'and the real campaign is active again')
-check(!existsSync(nodePath(`${ROOT}/campaigns/morgansfort/characters/alice.state.json`)),
-  'no .state.json was created beside the real alice.md')
+
+// The invariant is "this run changed nothing in the real campaign", not "the
+// real character has no state file". The earlier assertion hardcoded the
+// latter, which was true until that character was migrated with the operator's
+// consent — at which point it failed while the real invariant still held.
+// Hash both files instead, so the check survives any legitimate change to how
+// the campaign is stored.
+check(existsSync(nodePath(REAL_STATE)) === realStateExistedBefore,
+  `the real character's state file was ${realStateExistedBefore ? 'present' : 'absent'} and still is`)
+if (realStateExistedBefore) {
+  check(sha(REAL_STATE) === realStateBefore, 'and it is byte-identical')
+}
 
 console.log('')
 if (failures > 0) {

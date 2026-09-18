@@ -11,8 +11,106 @@
 
 import { DND_ROOT, activeCampaignDir, listMarkdown, readTextOrUndefined } from './shared.mjs'
 import { formatCharacter, parseCharacterSheet } from './sheet-parse.mjs'
+import { readCharacter } from './state-io.mjs'
+import { formatCurrency } from './state-rules.mjs'
 
 export const name = 'dnd-sheet'
+
+/**
+ * Project a `.state.json` character into the flat shape this tool has always
+ * returned.
+ *
+ * The shape is kept deliberately unchanged: `dnd_character_get` has consumers
+ * (the markdown card renderer, the model's own reading habits) that expect
+ * `hitPoints`, `abilityScores`, `spellSlotsByLevel` and friends. Rewriting them
+ * to mirror the nested state object would be a breaking change for no gain —
+ * what matters is that the numbers now come from the authoritative file.
+ *
+ * `parseVersion: 2` marks the difference, so a caller can tell which source
+ * produced a given row.
+ *
+ * @param character - a `readCharacter` result whose state is present.
+ * @returns the flat projection.
+ */
+function projectState(character) {
+  const s = character.state
+  const skills = {}
+  for (const [skillName, entry] of Object.entries(s.skills ?? {})) {
+    skills[skillName] = {
+      ability: entry.ability ?? null,
+      bonus: entry.bonus,
+      proficient: entry.proficient === true,
+    }
+  }
+
+  const abilityScores = {}
+  for (const [key, score] of Object.entries(s.abilities ?? {})) {
+    abilityScores[key] = score === null || score === undefined
+      ? null
+      : { score, modifier: Math.floor((score - 10) / 2) }
+  }
+
+  const slotsByLevel = {}
+  for (const [level, slot] of Object.entries(s.spellSlots ?? {})) {
+    slotsByLevel[level] = { total: slot.total, used: slot.used }
+  }
+  const firstLevel = Object.keys(slotsByLevel).sort((a, b) => Number(a) - Number(b))[0]
+
+  return {
+    parseVersion: 2,
+    name: s.name ?? character.name,
+    level: s.identity?.level ?? null,
+    xp: s.identity?.xp ?? null,
+    xpNext: s.identity?.xpNext ?? null,
+    klass: s.identity?.class ?? null,
+    race: s.identity?.race ?? null,
+    background: s.identity?.background ?? null,
+    alignment: s.identity?.alignment ?? null,
+
+    hitPoints: s.combat?.hp ?? { current: null, max: null },
+    tempHp: s.combat?.tempHp ?? 0,
+    ac: s.combat?.ac ?? null,
+    mageArmorAc: s.combat?.mageArmorAc ?? null,
+    initiative: s.combat?.initiative ?? null,
+    speed: s.combat?.speed ?? null,
+    hitDice: s.combat?.hitDice?.die ?? null,
+    hitDiceRemaining: s.combat?.hitDice?.remaining ?? null,
+    inspiration: false, // not part of the structured state
+    deathSaves: {
+      success: s.combat?.deathSaves?.successes ?? 0,
+      fail: s.combat?.deathSaves?.failures ?? 0,
+    },
+
+    abilityScores,
+    saves: s.saves ?? {},
+    proficientSaves: s.proficientSaves ?? [],
+    skills,
+    attacks: (s.attacks ?? []).map((a) => ({
+      name: a.name,
+      bonus: a.bonus,
+      damage: a.damage,
+      type: a.type,
+      notes: a.notes,
+    })),
+
+    spellSaveDC: s.spellcasting?.saveDC ?? null,
+    spellAttack: s.spellcasting?.attackBonus === null || s.spellcasting?.attackBonus === undefined
+      ? null
+      : String(s.spellcasting.attackBonus >= 0 ? `+${s.spellcasting.attackBonus}` : s.spellcasting.attackBonus),
+    spellcastingAbility: s.spellcasting?.ability ?? null,
+    spellSlots: firstLevel === undefined ? null : slotsByLevel[firstLevel],
+    spellSlotsByLevel: slotsByLevel,
+    cantrips: (s.spells?.cantrips ?? []).join(', ') || null,
+    spellbook: (s.spells?.spellbook ?? []).join(', ') || null,
+    prepared: (s.spells?.prepared ?? []).join(', ') || null,
+
+    equipment: s.equipment ?? { weapons: {}, armour: {}, gear: {} },
+    conditions: s.conditions ?? [],
+    currency: formatCurrency(s.currency ?? 0),
+    currencyCp: s.currency ?? 0,
+    warnings: [],
+  }
+}
 
 /**
  * Build this module's tools.
@@ -26,7 +124,19 @@ export function buildTools(ctx) {
   const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
   /**
-   * Load and parse every character sheet for a campaign.
+   * Load and parse every character for a campaign.
+   *
+   * Each character is read through `readCharacter`, so the `.state.json` is
+   * authoritative when it exists and the sheet's inline sections are the source
+   * only for an unmigrated sheet. The first version called `parseCharacterSheet`
+   * directly on the `.md`, which meant that once a character was migrated this
+   * tool returned `hitPoints: null` and warned that `## Combat Stats` was
+   * missing — while the correct numbers sat in the state file beside it. The
+   * panel read the state file and the tool did not, so the two disagreed, which
+   * is the exact drift this design exists to remove.
+   *
+   * The parsed shape is kept as it was, so existing consumers are unaffected.
+   *
    * @param fs - the resolved filesystem service.
    * @returns `{ campaign, characters, warnings }` or `{ error }`.
    */
@@ -34,9 +144,10 @@ export function buildTools(ctx) {
     const characters = []
     const warnings = []
     const files = await listMarkdown(fs, `${dir}/characters`)
+
+    // No campaign characters/: fall back to the global roster, which is always
+    // unmigrated sheets.
     if (files.length === 0) {
-      // Fall back to the global roster only when the campaign has no
-      // characters/ directory of its own.
       const globalFiles = await listMarkdown(fs, `${DND_ROOT}/characters`)
       for (const file of globalFiles) {
         const text = await readTextOrUndefined(fs, file.target ?? `${DND_ROOT}/characters/${file.name}`)
@@ -46,15 +157,27 @@ export function buildTools(ctx) {
       if (characters.length > 0) warnings.push('Read from the global roster; this campaign has no characters/.')
       return { campaign, characters, warnings }
     }
+
     for (const file of files) {
-      const text = await readTextOrUndefined(fs, file.target ?? `${dir}/characters/${file.name}`)
-      if (text === undefined) {
-        warnings.push(`Could not read ${file.name}.`)
+      const stem = file.name.replace(/\.md$/i, '')
+      const character = await readCharacter(fs, `${dir}/characters`, stem)
+
+      if (character.needsMigration || !character.hasStateFile) {
+        // Unmigrated: the sheet's own sections are the only source.
+        const text = await readTextOrUndefined(fs, file.target ?? `${dir}/characters/${file.name}`)
+        if (text === undefined) {
+          warnings.push(`Could not read ${file.name}.`)
+          continue
+        }
+        const parsed = parseCharacterSheet(text)
+        for (const warning of parsed.warnings) warnings.push(`${file.name}: ${warning}`)
+        characters.push({ file: file.name, ...parsed })
         continue
       }
-      const parsed = parseCharacterSheet(text)
-      for (const warning of parsed.warnings) warnings.push(`${file.name}: ${warning}`)
-      characters.push({ file: file.name, ...parsed })
+
+      const projected = projectState(character)
+      for (const warning of character.warnings) warnings.push(`${file.name}: ${warning}`)
+      characters.push({ file: file.name, ...projected })
     }
     return { campaign, characters, warnings }
   }

@@ -435,8 +435,14 @@ test('unknown sections are preserved as narrative, not dropped', () => {
     'an unrecognized section must survive intact')
 })
 
-// --- the real sheet -------------------------------------------------------
-const REAL = 'D:/DND/campaigns/morgansfort/characters/alice.md'
+// --- the real sheet, read from a FROZEN fixture ---------------------------
+// A committed copy, not the live campaign file. Reading the live file coupled
+// this suite to data the plugin itself migrates: once that character was split,
+// its sheet became narrative-only and these assertions failed — not because the
+// splitter broke, but because the input had legitimately changed shape.
+// A parser test must own its input.
+const REAL = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
+  .replace(/^\/([A-Za-z]:)/, '$1') // Windows: strip the leading slash from /D:/...
 if (existsSync(REAL)) {
   const raw = readFileSync(REAL, 'utf8')
   const { state, narrative } = splitSheet(raw)
