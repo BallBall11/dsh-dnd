@@ -216,7 +216,16 @@ function Character({ character }) {
         (combat.ac ?? '—') + (combat.mageArmorAc ? '（Mage Armor ' + combat.mageArmorAc + '）' : ''))),
     React.createElement('div', { className: 'dnd-row' },
       React.createElement('span', null, '先攻 / 速度'),
-      React.createElement('span', null, modifier(combat.initiative) + ' / ' + (combat.speed ?? '—') + ' ft')),
+      // initiative arrives as a FINAL modifier (sheet-parse reads the sheet's
+      // "**Initiative:** +2", sheet-split stores 2), not an ability score.
+      // Running it through modifier() re-applied the formula and turned 2 into
+      // -4 — the panel showing a number the DM would roll against and lose on.
+      // AC on the row above is rendered raw for the same reason.
+      React.createElement('span', null,
+        (typeof combat.initiative === 'number'
+          ? (combat.initiative >= 0 ? '+' : '') + combat.initiative
+          : '—')
+        + ' / ' + (combat.speed ?? '—') + ' ft')),
     st.spellcasting.saveDC !== null && st.spellcasting.saveDC !== undefined
       ? React.createElement('div', { className: 'dnd-row' },
         React.createElement('span', null, '法术 DC / 攻击'),
@@ -229,7 +238,14 @@ function Character({ character }) {
     React.createElement(Slots, { slots: st.spellSlots }),
     proficiency.length > 0
       ? React.createElement('div', { className: 'dnd-muted' },
-        '熟练：' + proficiency.map((p) => React.createElement('span', { key: p, className: 'dnd-pro' }, p + ' ')))
+        // The spans must be SIBLING children, not concatenated into the label.
+        // `'熟练：' + arr` stringifies the element objects through
+        // Array.prototype.toString, so the panel rendered the literal text
+        // "[object Object],[object Object]" and created no <span> at all —
+        // which also meant .dnd-pro never styled anything. Every other list in
+        // this file spreads its children; this was the one place that did not.
+        '熟练：',
+        ...proficiency.map((p) => React.createElement('span', { key: p, className: 'dnd-pro' }, p + ' ')))
       : null,
     Array.isArray(st.attacks) && st.attacks.length > 0
       ? React.createElement('div', null,

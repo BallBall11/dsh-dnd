@@ -7,11 +7,23 @@
  * actually run through the registry, and that a broken family cannot take the
  * others down.
  *
- * The mock fs reads the REAL D:/DND tree read-only, so this runs against the
- * live campaigns without writing anything.
+ * The mock fs is redirected into a temporary campaign tree that THIS FILE
+ * builds, so every assertion about a character owns its input. The live
+ * `campaigns/morgansfort/` tree is never read here — an earlier version read
+ * it directly, which meant that migrating the character made this suite assert
+ * against a sheet whose structured sections had moved to `.state.json`.
+ *
+ * The temp campaign is mounted by remapping the `D:/DND` prefix, exactly as
+ * routes.test.mjs does, so the production path shape is preserved while
+ * nothing live is touched.
+ *
+ * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
  */
 import assert from 'node:assert/strict'
+// Async API for the fs-service mock, sync API for building the temp tree.
 import { readFile, stat as fsStat, readdir } from 'node:fs/promises'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 let failures = 0
@@ -25,6 +37,70 @@ async function test(name, fn) {
     console.error('       ' + (error && error.message ? error.message : error))
   }
 }
+
+/** Flip to 1 for a resolve/stat trace of every fs call this suite makes. */
+const TRACE = process.env.DND_TRACE_FS === '1'
+const trace = (...parts) => { if (TRACE) console.error('   ·', ...parts) }
+
+// --- the temp campaign this suite owns -------------------------------------
+// A minimal but complete campaign: a state.md (so dnd_campaign_state and the
+// ruleset resolution have something to read) and one character.
+const tempRoot = mkdtempSync(path.join(tmpdir(), 'dnd-host-'))
+const tempCampaigns = path.join(tempRoot, 'campaigns').replace(/\\/g, '/')
+const tempRuntime = path.join(tempRoot, '.runtime').replace(/\\/g, '/')
+mkdirSync(path.join(tempRoot, 'campaigns', 'testcamp', 'characters'), { recursive: true })
+mkdirSync(path.join(tempRoot, '.runtime'), { recursive: true })
+
+// The suite tears the temp campaign down at the end; a throw before that point
+// must not leave it behind.
+process.on('exit', () => {
+  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* already gone */ }
+})
+
+writeFileSync(path.join(tempRoot, 'campaigns', 'testcamp', 'state.md'), [
+  '# Test Camp',
+  '',
+  '**Ruleset:** 2024',
+  '',
+  '## Current Situation',
+  '- **Location:** A test room.',
+  '- **Party:** Alice',
+  '',
+  '## Live State Flags',
+  '- **roll_mode:** auto',
+  '',
+  '## Active Quests',
+  '- Find Alice a spell.',
+  '',
+].join('\n'), 'utf8')
+
+// The frozen fixture is the input this suite parses: an unmigrated sheet whose
+// shape this test controls. Copying it into the temp campaign means the
+// character cannot be migrated out from under the assertions.
+const FIXTURE = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
+  .replace(/^\/([A-Za-z]:)/, '$1')
+writeFileSync(
+  path.join(tempRoot, 'campaigns', 'testcamp', 'characters', 'alice.md'),
+  readFileSync(FIXTURE, 'utf8'),
+  'utf8',
+)
+
+// The active-campaign marker points at the temp campaign.
+writeFileSync(path.join(tempRoot, '.runtime', 'active-campaign.json'),
+  JSON.stringify({ name: 'testcamp' }), 'utf8')
+
+/** Map the production data root onto the temp tree, preserving path shape. */
+const remap = (p) => String(p)
+  // The bundled SRD datasets are CODE, not campaign data (see shared.mjs:
+  // SKILL_ROOT is the code root, DND_ROOT the data root). They are read-only
+  // reference data this suite legitimately reads in place: `dnd_srd_lookup` is
+  // a pure lookup over a shipped dataset, and its output cannot be affected by
+  // anything under campaigns/. Redirecting them would test a copy, not the
+  // artifact that ships.
+  .replace(/^D:\/DND\/\.agents\/skills\/dnd\/data/i, (m) => m)
+  .replace(/^D:\/DND\/campaigns\/testcamp/i, (m) => m)
+  .replace(/^D:\/DND\/campaigns/i, tempCampaigns)
+  .replace(/^D:\/DND\/\.runtime/i, tempRuntime)
 
 /**
  * The host fs service, modelled on the REAL contract.
@@ -60,20 +136,36 @@ function asTarget(value, method) {
   if (value === null || typeof value !== 'object' || typeof value.displayPath !== 'string') {
     throw new TypeError(`fs.${method}() received neither a FsTarget nor a path: ${JSON.stringify(value)}`)
   }
-  return value.displayPath
+  return remap(value.displayPath)
 }
 
 const fsService = {
-  async resolve(p) { return makeTarget(p) },
+  async resolve(p) {
+    const r = remap(p)
+    trace('resolve', p, '->', r)
+    return makeTarget(r)
+  },
   async stat(target) {
     const display = asTarget(target, 'stat')
     try {
       const s = await fsStat(display.replace(/\//g, path.sep))
+      trace('stat   ', display, s.isDirectory() ? 'dir' : 'file')
       return { type: s.isDirectory() ? 'directory' : 'file', size: s.size, mtime: s.mtimeMs }
-    } catch { return undefined }
+    } catch (error) {
+      // ENOENT means "absent", which is a legal answer. Anything else is a bug
+      // in this mock or in the path, and swallowing it here is what made an
+      // earlier failure read as "no active campaign" instead of naming itself.
+      if (error?.code !== 'ENOENT') {
+        trace('stat   ', display, 'THREW', error?.code ?? error?.message)
+        throw error
+      }
+      trace('stat   ', display, 'MISSING')
+      return undefined
+    }
   },
   async readText(target) {
     const display = asTarget(target, 'readText')
+    trace('read   ', display)
     return readFile(display.replace(/\//g, path.sep), 'utf8')
   },
   async listDir(target) {
@@ -428,6 +520,8 @@ await test('a throwing register surfaces instead of being swallowed', async () =
   assert.throws(() => mod.apply(ctx), /duplicate exact route/,
     'a route collision must be visible, not logged and ignored')
 })
+
+rmSync(tempRoot, { recursive: true, force: true })
 
 console.log('')
 if (failures > 0) {

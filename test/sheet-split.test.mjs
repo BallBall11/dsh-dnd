@@ -7,13 +7,25 @@
  * correctness matters too, but a wrong field is recoverable and mangled prose
  * is not.
  *
- * The real sheet is read from disk where present, because a fixture written
- * from the same assumptions as the code cannot catch a wrong assumption. That
- * is exactly how a `| Slot |` header, invented rather than looked up, produced
- * a parser that failed on every real sheet while passing its own tests.
+ * The real sheet is read from a COMMITTED FIXTURE under test/fixtures/, not
+ * from disk-live campaign data. The distinction matters: a fixture written from
+ * the same assumptions as the code cannot catch a wrong assumption, which is
+ * exactly how a `| Slot |` header, invented rather than looked up, produced a
+ * parser that failed on every real sheet while passing its own tests. So the
+ * fixture is a byte-frozen copy of a REAL sheet (sha256 91a90f00…), captured
+ * before the plugin migrated it.
+ *
+ * It must stay a fixture. Reading `campaigns/morgansfort/characters/alice.md`
+ * directly coupled this suite to data the plugin itself rewrites: once that
+ * character was split, its sheet became narrative-only and six assertions here
+ * failed — not because the splitter broke, but because the input had
+ * legitimately changed shape. A parser test must own its input.
+ *
+ * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
  */
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import {
   splitSheet,
   splitSectionsExact,
@@ -441,11 +453,22 @@ test('unknown sections are preserved as narrative, not dropped', () => {
 // its sheet became narrative-only and these assertions failed — not because the
 // splitter broke, but because the input had legitimately changed shape.
 // A parser test must own its input.
+//
+// The digest is asserted, not merely noted: a fixture editable into whatever
+// the splitter currently accepts stops being evidence.
 const REAL = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
   .replace(/^\/([A-Za-z]:)/, '$1') // Windows: strip the leading slash from /D:/...
+const FIXTURE_SHA256 = '91a90f003c8166997765dfd2e82c4ae6cd0040ae465dfc681919c38ef6aa6688'
 if (existsSync(REAL)) {
   const raw = readFileSync(REAL, 'utf8')
   const { state, narrative } = splitSheet(raw)
+
+  test('the fixture is the frozen pre-migration sheet', () => {
+    const actual = createHash('sha256').update(readFileSync(REAL)).digest('hex')
+    assert.equal(actual, FIXTURE_SHA256,
+      'test/fixtures/alice-unmigrated.md changed. It is a frozen copy of a real sheet; if the edit is '
+      + 'intentional, update FIXTURE_SHA256 here and say why in the commit message.')
+  })
 
   test('the real alice.md splits without warnings', () => {
     assert.deepEqual(state.warnings, [], JSON.stringify(state.warnings))
@@ -501,7 +524,13 @@ if (existsSync(REAL)) {
     }
   })
 } else {
-  console.log('  skip real morgansfort/alice.md (not present)')
+  // A committed fixture is not optional. Skipping quietly would leave the whole
+  // real-sheet block unrun and this suite green — the exact shape of hole that
+  // let a wrong `| Slot |` header ship while every test passed.
+  failures += 1
+  console.error('  FAIL the frozen fixture is missing: ' + REAL)
+  console.error('       test/fixtures/alice-unmigrated.md is committed; if it was removed, restore it.')
+  console.error('       It must stay a fixture — never point this at campaigns/morgansfort/.')
 }
 
 console.log('')

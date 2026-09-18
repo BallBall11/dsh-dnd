@@ -7,7 +7,12 @@
  * than the real thing does. The cost is a few milliseconds of socket setup for
  * the module that decides what the panel displays.
  *
- * The real `morgansfort` campaign is read but never written.
+ * The campaign this suite asserts against is a temp tree this file builds and
+ * deletes, so every response-shape assertion owns its input. The live campaign
+ * is read once, at the end, purely to prove this suite did not write to it —
+ * never to assert what it contains.
+ *
+ * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
  */
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -17,6 +22,14 @@ import path from 'node:path'
 import { API_PREFIX, ROUTES, buildHandlers, mountRoutes } from '../src/host/routes.mjs'
 import { activeCampaignDir } from '../src/host/tools/shared.mjs'
 import { readAllCharacters } from '../src/host/tools/state-io.mjs'
+import {
+  LIVE_CAMPAIGN,
+  LIVE_MARKER,
+  liveExists,
+  liveWitness,
+  snapshotTree,
+  diffTree,
+} from './support/live-data.mjs'
 
 let failures = 0
 async function test(name, fn) {
@@ -355,46 +368,50 @@ await test('a duplicate route registration throws, which is why disposers matter
   assert.doesNotThrow(() => mountRoutes(throwing), 'after disposal the remount succeeds')
 })
 
-// --- the real campaign, read-only ----------------------------------------
+// --- the live campaign, read-only -----------------------------------------
 //
-// The property is "THIS SUITE DOES NOT TOUCH THE REAL CAMPAIGN", not "the real
-// character happens to be unmigrated". The first version asserted that no
-// `.state.json` sat beside `alice.md` — a proxy that was true until that
-// character was migrated with the operator's consent, at which point it failed
-// while the actual invariant still held perfectly.
+// INVARIANT TEST. The property is "THIS SUITE DOES NOT TOUCH THE REAL
+// CAMPAIGN", not "the real character happens to be unmigrated" and not "the
+// real character's HP is 8". The first version asserted that no `.state.json`
+// sat beside `alice.md` — a proxy that was true until that character was
+// migrated with the operator's consent, at which point it failed while the
+// actual invariant still held perfectly.
 //
-// Hashing both files and requiring them unchanged asserts the invariant itself,
-// and keeps holding however the campaign is stored.
-const REAL = 'D:/DND/campaigns/morgansfort/characters/alice.md'
-const REAL_STATE = 'D:/DND/campaigns/morgansfort/characters/alice.state.json'
-const readIfPresent = (p) => { try { return readFileSync(nodePath(p)) } catch { return null } }
-const realExists = readIfPresent(REAL) !== null
-if (realExists) {
-  await test('the real campaign is untouched by these tests', async () => {
-    const sheetBefore = readIfPresent(REAL)
-    const stateBefore = readIfPresent(REAL_STATE)
-    assert.ok(sheetBefore !== null, 'the real sheet exists')
+// So: snapshot the whole character directory, drive the read path this suite
+// exists to exercise, snapshot again, require no difference. That holds however
+// the campaign is stored, and for however many characters it has.
+//
+// The campaign directory is a module constant pointing at D:\DND, so this is
+// the one place in the suite that deliberately reads live data. It compares
+// bytes only; it never inspects what those bytes say.
+const LIVE_CHAR_DIR = `${LIVE_CAMPAIGN}/characters`
+if (liveExists(LIVE_CHAR_DIR)) {
+  await test('the live campaign is untouched by these tests', async () => {
+    const before = snapshotTree(LIVE_CHAR_DIR)
 
-    // Re-read through the character-listing path this suite exercises, then
-    // compare bytes. `makeFs` still resolves absolute paths, so this reads the
-    // real campaign directory — which is exactly what we want to prove is safe.
+    // Re-read through the character-listing path this suite exercises.
+    // `makeFs` resolves absolute paths, so this reads the live campaign
+    // directory — which is exactly what we want to prove is safe.
     const realFs = makeFs()
     const located = await activeCampaignDir(realFs)
     assert.ok(located !== undefined, 'the real campaign is active for this check')
     await readAllCharacters(realFs, `${located.dir}/characters`)
 
-    assert.ok(sheetBefore.equals(readIfPresent(REAL)), 'the real sheet must not change')
-    const stateAfter = readIfPresent(REAL_STATE)
-    assert.equal(
-      stateBefore === null ? null : stateBefore.length,
-      stateAfter === null ? null : stateAfter.length,
-      'the real state file must not change',
-    )
-    if (stateBefore !== null) {
-      assert.ok(stateBefore.equals(stateAfter), 'the real state file must be byte-identical')
-    }
+    const changes = diffTree(before, snapshotTree(LIVE_CHAR_DIR))
+    assert.deepEqual(changes, [], 'the live campaign must not change. Differences: ' + changes.join('; '))
   })
 }
+
+await test('the live active-campaign marker is not written by these tests', () => {
+  // This marker is rewritten by the write-tools and concurrency scenarios,
+  // which repoint it and restore it in a `finally`. It carries a BOM in the
+  // real installation, so an accidental text-mode round trip silently strips
+  // it and "no active campaign" comes back. Runs unconditionally: the marker
+  // must exist and must not have moved.
+  const witness = liveWitness(LIVE_MARKER, 'the active-campaign marker')
+  assert.ok(witness.existedBefore, 'the marker should exist while a campaign is in play')
+  witness.assertUnchanged()
+})
 
 rmSync(root, { recursive: true, force: true })
 

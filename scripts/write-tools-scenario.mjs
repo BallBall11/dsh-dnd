@@ -25,6 +25,7 @@ import { readFileSync, writeFileSync, statSync, readdirSync, existsSync } from '
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/track.mjs'
+import { snapshotTree, diffTree } from '../test/support/live-data.mjs'
 
 const nodePath = (p) => String(p).replace(/\//g, path.sep)
 const target = (p) => ({ targetKey: String(p).toLowerCase(), displayPath: String(p).replace(/\\/g, '/') })
@@ -109,6 +110,18 @@ const realBefore = sha(REAL)
 const REAL_STATE = `${ROOT}/campaigns/morgansfort/characters/alice.state.json`
 const realStateExistedBefore = existsSync(nodePath(REAL_STATE))
 const realStateBefore = realStateExistedBefore ? sha(REAL_STATE) : null
+
+// The whole live campaign character directory, hashed before and after.
+//
+// Hashes say "these bytes did not move" without this script ever asserting what
+// those bytes contain, so migrating a character, renaming one, or changing a
+// number is invisible here. That is the point: the invariant is "THIS RUN WROTE
+// NOTHING", not "the campaign looks the way it looked when this was written".
+//
+// It is also strictly stronger than watching alice's two files: a stray write
+// to any OTHER character under the live campaign now fails this run.
+const LIVE_CHAR_DIR = `${ROOT}/campaigns/morgansfort/characters`
+const liveDirBefore = snapshotTree(LIVE_CHAR_DIR)
 
 // Read and restore the marker as BYTES, not as text. `readFileSync(_, 'utf8')`
 // strips the BOM while decoding, so writing that string back silently removes
@@ -392,6 +405,12 @@ check(existsSync(nodePath(REAL_STATE)) === realStateExistedBefore,
 if (realStateExistedBefore) {
   check(sha(REAL_STATE) === realStateBefore, 'and it is byte-identical')
 }
+
+// The whole-directory check: catches a stray write to any other character too.
+const liveDirChanges = diffTree(liveDirBefore, snapshotTree(LIVE_CHAR_DIR))
+check(liveDirChanges.length === 0,
+  'nothing under campaigns/morgansfort/characters moved'
+  + (liveDirChanges.length > 0 ? ' — ' + liveDirChanges.join('; ') : ' (whole tree hashed)'))
 
 console.log('')
 if (failures > 0) {

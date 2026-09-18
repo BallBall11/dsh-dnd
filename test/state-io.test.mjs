@@ -7,7 +7,15 @@
  * that cannot fail is not a test. The cost here is a few milliseconds of real
  * I/O, which is worth paying for a module that rewrites campaign data.
  *
- * The real `morgansfort/alice.md` is read but never written.
+ * Two kinds of test live here, and they obey different rules (see
+ * test/support/live-data.mjs and docs/harness/TEST-DATA-OWNERSHIP.md):
+ *
+ *   - the round-trip cases below own their input outright: a temp directory
+ *     this file creates and deletes.
+ *   - the final block reads the LIVE character, because "reading never writes"
+ *     is an invariant that must hold for whatever is actually on disk. It
+ *     asserts a property (nothing moved, the read is self-consistent) and
+ *     never a snapshot of that character's numbers.
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
@@ -22,6 +30,7 @@ import {
   sheetPath,
 } from '../src/host/tools/state-io.mjs'
 import { serializeState } from '../src/host/tools/state-schema.mjs'
+import { liveExists, snapshotTree, diffTree } from './support/live-data.mjs'
 
 let failures = 0
 async function test(name, fn) {
@@ -442,41 +451,50 @@ await test('a valid write is not refused and reports no errors', async () => {
 
 // --- the real character, read-only ----------------------------------------
 //
-// The property under test is "READING NEVER WRITES", not "this character is
-// unmigrated". The first version asserted `needsMigration === true` and that no
-// `.state.json` existed — true at the time, and deliberately false after that
-// character was migrated with the operator's consent. Asserting a snapshot of
-// one campaign's migration status means the test breaks when the campaign
-// legitimately changes, and says nothing about the invariant it was named for.
+// INVARIANT TEST, not a parser test. The promise under test is "READING NEVER
+// WRITES"; it must hold for every possible state of the live campaign, so this
+// block is allowed to read live data — and is forbidden from asserting what
+// that data says.
 //
-// So: hash both files, read, hash again, require no change. That holds whether
-// the character is migrated or not, which is the point.
+// The history matters. The first version asserted `needsMigration === true` and
+// that no `.state.json` existed. Both were true when written and both became
+// deliberately false when that character was migrated with the operator's
+// consent — so the suite went red while the code was perfect. The next version
+// still asserted `c.state.identity.class === 'Wizard'`, `hp 8/8`, `currency
+// 800`: the same mistake with a smaller blast radius. A campaign number is
+// supposed to change.
+//
+// What remains is the shape of the read, plus a byte-level "nothing moved".
+// Both survive any legitimate campaign edit.
 const REAL_DIR = 'D:/DND/campaigns/morgansfort/characters'
-if (existsSync(REAL_DIR.replace(/\//g, path.sep))) {
+if (liveExists(REAL_DIR)) {
   await test('reading the real character writes nothing', async () => {
-    const sheetFile = path.join(REAL_DIR.replace(/\//g, path.sep), 'alice.md')
-    const stateFile = path.join(REAL_DIR.replace(/\//g, path.sep), 'alice.state.json')
-
-    const sheetBefore = readFileSync(sheetFile)
-    const stateExistedBefore = existsSync(stateFile)
-    const stateBefore = stateExistedBefore ? readFileSync(stateFile) : null
+    // Snapshot the WHOLE character directory, not just alice's two files: the
+    // invariant is that a read is inert, so a read that created a stray file
+    // anywhere under here must fail this too.
+    const before = snapshotTree(REAL_DIR)
 
     const c = await readCharacter(fs, REAL_DIR, 'alice')
-    assert.equal(c.state.name, 'Alice')
+    assert.equal(typeof c.state, 'object', 'a read must still return state')
 
-    assert.ok(sheetBefore.equals(readFileSync(sheetFile)),
-      'reading must not modify the real sheet')
-    assert.equal(existsSync(stateFile), stateExistedBefore,
-      'reading must not create or delete a state file')
-    if (stateExistedBefore) {
-      assert.ok(stateBefore.equals(readFileSync(stateFile)),
-        'reading must not modify the real state file')
-    }
+    const changes = diffTree(before, snapshotTree(REAL_DIR))
+    assert.deepEqual(changes, [], 'reading must not write. Differences: ' + changes.join('; '))
+  })
+
+  await test('reading every character in the directory writes nothing', async () => {
+    // The listing path is the one the panel uses. Whatever characters exist,
+    // reading all of them must be inert — including a character that is
+    // mid-migration or has a malformed state file.
+    const before = snapshotTree(REAL_DIR)
+    await readAllCharacters(fs, REAL_DIR)
+    const changes = diffTree(before, snapshotTree(REAL_DIR))
+    assert.deepEqual(changes, [], 'listing must not write. Differences: ' + changes.join('; '))
   })
 
   await test('the real character reads the same twice', async () => {
     // A read that depended on hidden state — a cache warmed by the first call,
-    // a clock, a mutation in place — would show up here.
+    // a clock, a mutation in place — would show up here. This compares two
+    // reads of the SAME data, so it says nothing about what the values are.
     const first = await readCharacter(fs, REAL_DIR, 'alice')
     const second = await readCharacter(fs, REAL_DIR, 'alice')
     assert.deepEqual(second.state, first.state)
@@ -484,16 +502,15 @@ if (existsSync(REAL_DIR.replace(/\//g, path.sep))) {
     assert.equal(second.needsMigration, first.needsMigration)
   })
 
-  await test('the real character\'s numbers match what the campaign file says', async () => {
-    // Independent of migration status: whichever source is authoritative, these
-    // are the values the DM reads, and they must not drift.
+  await test('the read is self-describing about which source it used', async () => {
+    // A migrated character reads its numbers from `.state.json`; an unmigrated
+    // one derives them from the sheet. Both are legal, so assert the RULE that
+    // links the flag to the file rather than either particular outcome.
     const c = await readCharacter(fs, REAL_DIR, 'alice')
-    assert.equal(c.state.identity.class, 'Wizard')
-    assert.equal(c.state.identity.level, 1)
-    assert.equal(c.state.abilities.INT, 17)
-    assert.deepEqual(c.state.combat.hp, { current: 8, max: 8 })
-    assert.equal(c.state.combat.ac, 12)
-    assert.equal(c.state.currency, 800, '8 gp 0 sp 0 cp')
+    assert.equal(c.hasStateFile, !c.needsMigration,
+      'needsMigration must be exactly the inverse of hasStateFile — a character that has no '
+      + 'state file needs migrating, and one that has a state file does not. Got '
+      + `needsMigration=${c.needsMigration}, hasStateFile=${c.hasStateFile}`)
   })
 }
 

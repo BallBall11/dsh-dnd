@@ -4,6 +4,12 @@
  * The first case is the bug that motivated the rewrite: v0.1.0 matched only the
  * first spell-slot row, so a multi-circle caster silently parsed as a
  * single-circle one. That assertion would have failed against the old parser.
+ *
+ * This is a PARSER TEST: it owns every input it reads. The synthetic sheets are
+ * written inline, and the "real sheet" block reads the committed fixture
+ * test/fixtures/alice-unmigrated.md — never a live campaign file.
+ *
+ * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
  */
 import assert from 'node:assert/strict'
 import { parseCharacterSheet, formatCharacter, PARSE_VERSION } from '../src/host/tools/sheet-parse.mjs'
@@ -288,12 +294,27 @@ test('parses death saves', () => {
 //
 // The fixture is byte-identical (sha256 91a90f00…) to the sheet as it was
 // before migration, so it keeps testing the format this parser exists to read.
+//
+// The hash is asserted below, not merely recorded here: a fixture that could be
+// edited into whatever the parser currently accepts is not a fixture, it is a
+// mirror. Pinning the digest makes any edit to it a deliberate, visible act.
 import { readFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 const REAL_SHEET = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
   .replace(/^\/([A-Za-z]:)/, '$1') // Windows: strip the leading slash from /D:/...
+const FIXTURE_SHA256 = '91a90f003c8166997765dfd2e82c4ae6cd0040ae465dfc681919c38ef6aa6688'
 
 if (existsSync(REAL_SHEET)) {
-  const real = parseCharacterSheet(readFileSync(REAL_SHEET, 'utf8'))
+  const rawFixture = readFileSync(REAL_SHEET, 'utf8')
+  const real = parseCharacterSheet(rawFixture)
+
+  test('the fixture is the frozen pre-migration sheet', () => {
+    const actual = createHash('sha256').update(readFileSync(REAL_SHEET)).digest('hex')
+    assert.equal(actual, FIXTURE_SHA256,
+      'test/fixtures/alice-unmigrated.md changed. It is a frozen copy of a real sheet, used to prove '
+      + 'the parser reads the format real sheets actually use. If the change is intentional, update '
+      + 'FIXTURE_SHA256 in this file and say why in the commit message.')
+  })
 
   test('parses the real morgansfort/alice.md', () => {
     assert.equal(real.name, 'Alice')
@@ -369,7 +390,12 @@ if (existsSync(REAL_SHEET)) {
     assert.match(real.cantrips, /Light/, real.cantrips)
   })
 } else {
-  console.log('  skip real morgansfort/alice.md (not present)')
+  // A committed fixture is not optional: skipping quietly would leave every
+  // real-sheet assertion unrun and this suite green.
+  failures += 1
+  console.error('  FAIL the frozen fixture is missing: ' + REAL_SHEET)
+  console.error('       test/fixtures/alice-unmigrated.md is committed; if it was removed, restore it.')
+  console.error('       It must stay a fixture — never point this at campaigns/morgansfort/.')
 }
 
 console.log('')
