@@ -13,6 +13,9 @@
  *   tools/campaign.mjs  dnd_campaign_state dnd_campaign_search dnd_arc_status
  *   tools/sheet.mjs     dnd_character_get
  *   tools/track.mjs     dnd_track dnd_spend dnd_xp_add
+ *   tools/calendar.mjs  dnd_calendar
+ *   tools/initiative.mjs  dnd_initiative dnd_initiative_end
+ *   tools/effects.mjs   dnd_effect dnd_concentration dnd_death_save
  *
  * track.mjs is the only family that writes. Everything above it is pure, which
  * is what lets the write path be reasoned about on its own.
@@ -28,10 +31,22 @@ import * as lookup from './tools/lookup.mjs'
 import * as campaign from './tools/campaign.mjs'
 import * as sheet from './tools/sheet.mjs'
 import * as track from './tools/track.mjs'
+import * as calendar from './tools/calendar.mjs'
+import * as initiative from './tools/initiative.mjs'
+import * as effects from './tools/effects.mjs'
 import { mountRoutes } from './routes.mjs'
+import { createProbeState, setWriteProbeState } from './tools/write-probe.mjs'
 
-/** Every tool family, in mount order. */
-const FAMILIES = [roll, lookup, campaign, sheet, track]
+/**
+ * Every tool family, in mount order.
+ *
+ * Exported so host.test.mjs can derive the expected tool count instead of
+ * hard-coding it. A hard-coded 14 was correct until T8/T9/T10 each added a
+ * family, at which point three unrelated suites would have gone red for a
+ * change that was entirely intended. Deriving the number from this list keeps
+ * "every family registered" as the actual invariant under test.
+ */
+export const FAMILIES = [roll, lookup, campaign, sheet, track, calendar, initiative, effects]
 
 export const name = 'dnd-host'
 
@@ -97,6 +112,22 @@ export function apply(ctx) {
       }
     }
   }
+
+  // ── Startup write self-check (T6) ────────────────────────────────────────
+  //
+  // The defect behind this whole board was ASYMMETRIC: reads and dice worked,
+  // only writes were refused. A session therefore looked healthy right up to
+  // the moment a DM discovered nothing had been saved.
+  //
+  // The probe is NOT run here, and that is the load-bearing decision. At mount
+  // there is no session, so a probe could only ever test the process-cwd
+  // fallback — a configuration NO real write uses, because every write tool
+  // resolves its caller's session policy (T2, session-scope.mjs). Probing here
+  // would therefore report a FALSE FAILURE on a perfectly healthy host.
+  //
+  // Instead the probe runs on the FIRST write-tool call, where `exec.agent`
+  // yields a genuine session. See runWriteSelfCheck in write-probe.mjs.
+  setWriteProbeState(createProbeState())
 
   // The HTTP surface the Client panel reads.
   //

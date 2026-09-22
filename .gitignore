@@ -8,6 +8,15 @@ node_modules/
 COMMIT_*.txt
 _diag.mjs
 
+# Check-run output dumps and one-off acceptance probes. These are the raw stdout
+# of `npm run check` captured to a file for reading, plus single-use scripts
+# written to inspect one behaviour. They are regenerable and were never meant to
+# ship: a release commit published ~250 KB of them before these patterns existed.
+check-*.txt
+.check-*.txt
+.acceptance-*.json
+probe-*.mjs
+
 # Real-browser verification screenshots, produced by scripts/browser-verify.mjs.
 # They are regenerable binary evidence, not source. Kept on disk for human
 # inspection; deliberately not tracked. (Task 2's record asks for exactly this:

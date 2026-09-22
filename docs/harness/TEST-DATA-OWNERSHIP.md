@@ -133,7 +133,14 @@ assert.equal(existsSync(stateFile), false)
 **1. 代码根 ≠ 数据根**（见 `src/host/tools/shared.mjs`）
 
 - `DND_ROOT = D:/DND` —— 数据根，**战役数据**在这里，测试必须重映射。
-- `SKILL_ROOT = D:/DND/.agents/skills/dnd` —— 代码根，**SRD 数据集**在这里。
+- `DATA_ROOT = <包目录>/data` —— 插件**自带的只读数据**，**SRD 数据集**在这里。
+  由 `import.meta.url` 解析（`src/host/tools/shared.mjs`），不再依赖任何配置根。
+
+  > 历史：这两个数据集原先放在 `D:/DND/.agents/skills/dnd/data/`，即已安装 skill 的代码根。
+  > 该 skill 被**用户故意删除**后，`dnd_srd_lookup` 开始报「dataset not found」。
+  > 根因不是路径写错，而是**归属错位**：随插件发布的查询表是插件的依赖，
+  > 应当随包走，而不是放在战役工作区里、被任何一次清理带走。
+  > 现已移入 `dsh-dnd-bundle/data/`。
 
 SRD 数据集是随插件发布的只读参考数据，`dnd_srd_lookup` 是纯查询，输出不受
 `campaigns/` 影响。它的路径**必须豁免重映射**，否则测的是副本而不是发布的工件。

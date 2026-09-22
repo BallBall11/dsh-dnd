@@ -1,0 +1,150 @@
+{
+  "_meta": {
+    "description": "Supplemental entries for non-SRD content used in active campaigns",
+    "sources": [
+      "Xanathar's Guide to Everything",
+      "Player's Handbook (Thief Archetype)"
+    ]
+  },
+  "spells": [
+    {
+      "name": "Toll the Dead",
+      "index": "toll-the-dead",
+      "level": 0,
+      "school": "Necromancy",
+      "casting_time": "1 action",
+      "range": "60 feet",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "Instantaneous",
+      "concentration": false,
+      "ritual": false,
+      "classes": [
+        "Cleric",
+        "Warlock",
+        "Wizard"
+      ],
+      "description": "You point at one creature you can see within range, and the sound of a dolorous bell fills the air around it for a moment. The target must succeed on a Wisdom saving throw or take 1d8 necrotic damage. If the target is missing any of its hit points, it instead takes 1d12 necrotic damage.\n\nThe spell's damage increases by one die when you reach 5th level (2d8 or 2d12), 11th level (3d8 or 3d12), and 17th level (4d8 or 4d12).",
+      "source": "Xanathar's Guide to Everything, p. 169",
+      "wikidot_url": "https://dnd5e.wikidot.com/spell:toll-the-dead"
+    },
+    {
+      "name": "Damage",
+      "index": "damage",
+      "description": "See full description at https://dnd5e.wikidot.com/spell:damage",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/spell:damage",
+      "level": 0,
+      "school": ""
+    },
+    {
+      "name": "Notes",
+      "index": "notes",
+      "description": "See full description at https://dnd5e.wikidot.com/spell:notes",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/spell:notes",
+      "level": 0,
+      "school": ""
+    },
+    {
+      "name": "Lightning",
+      "index": "lightning",
+      "description": "See full description at https://dnd5e.wikidot.com/spell:lightning",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/spell:lightning",
+      "level": 0,
+      "school": ""
+    },
+    {
+      "name": "Cold",
+      "index": "cold",
+      "description": "See full description at https://dnd5e.wikidot.com/spell:cold",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/spell:cold",
+      "level": 0,
+      "school": ""
+    }
+  ],
+  "features": [
+    {
+      "name": "Circle of Spores",
+      "index": "circle-of-spores",
+      "class": "Druid",
+      "level_req": 2,
+      "description": "The Circle of Spores druid views living and dead matter as interconnected parts of the same cycle of life. Death is not an end but a transition \u2014 the spores of decay become the seeds of new growth. Druids of this circle harness that connection, animating the recently dead and infecting living creatures with transformative fungal growth.\n\nSpells always prepared (Circle Spells): Blindness/Deafness (2nd), Gentle Repose (2nd).",
+      "source": "Xanathar's Guide to Everything, p. 23",
+      "wikidot_url": "https://dnd5e.wikidot.com/druid:circle-of-spores"
+    },
+    {
+      "name": "Halo of Spores",
+      "index": "halo-of-spores",
+      "class": "Druid",
+      "level_req": 2,
+      "description": "Starting at 2nd level, you are surrounded by invisible, necrotic spores that are harmless until you unleash them on a creature nearby. When a creature you can see moves into a space within 10 feet of you or starts its turn there, you can use your reaction to deal 1d4 necrotic damage to that creature unless it succeeds on a Constitution saving throw against your spell save DC.\n\nThe necrotic damage increases to 1d6 at 6th level, 1d8 at 10th level, and 1d10 at 14th level.",
+      "source": "Xanathar's Guide to Everything, p. 23",
+      "wikidot_url": "https://dnd5e.wikidot.com/druid:halo-of-spores"
+    },
+    {
+      "name": "Symbiotic Entity",
+      "index": "symbiotic-entity",
+      "class": "Druid",
+      "level_req": 2,
+      "description": "Also at 2nd level, you gain the ability to channel magic into your spores. As an action, you can expend a use of your Wild Shape feature to awaken those spores, rather than transforming into a beast form, and you gain 4 temporary hit points for each level you have in this class.\n\nWhile this feature is active, you gain the following benefits:\n- When you deal your Halo of Spores damage, roll the damage die a second time and add it to the total.\n- Your melee weapon attacks deal an extra 1d6 necrotic damage to any target they hit.\n\nThese benefits last for 10 minutes, until you lose all these temporary hit points, or until you use your Wild Shape again.",
+      "source": "Xanathar's Guide to Everything, p. 23",
+      "wikidot_url": "https://dnd5e.wikidot.com/druid:symbiotic-entity"
+    },
+    {
+      "name": "Fungal Infestation",
+      "index": "fungal-infestation",
+      "class": "Druid",
+      "level_req": 3,
+      "description": "When a Small or Medium beast or humanoid dies within 10 feet of you, you can use your reaction to animate it as a zombie. The zombie acts after all other creatures' turns and follows your mental commands (no action required). It lasts for 1 hour, until it drops to 0 hit points, or until you die.\n\nThe maximum number of zombies you can have active at once equals your Wisdom modifier (3 at current level).",
+      "source": "Xanathar's Guide to Everything, p. 23 (adapted)",
+      "wikidot_url": "https://dnd5e.wikidot.com/druid:fungal-infestation"
+    },
+    {
+      "name": "Fast Hands",
+      "index": "fast-hands",
+      "class": "Rogue",
+      "level_req": 3,
+      "description": "Starting at 3rd level, you can use the bonus action granted by your Cunning Action to make a Dexterity (Sleight of Hand) check, use your thieves' tools to disarm a trap or open a lock, or take the Use an Object action.",
+      "source": "Player's Handbook, p. 97 (Thief Archetype)",
+      "wikidot_url": "https://dnd5e.wikidot.com/rogue:fast-hands"
+    },
+    {
+      "name": "Second-Story Work",
+      "index": "second-story-work",
+      "class": "Rogue",
+      "level_req": 3,
+      "description": "When you choose this archetype at 3rd level, you gain the ability to climb faster than normal; climbing no longer costs you extra movement.\n\nIn addition, when you make a running jump, the distance you cover increases by a number of feet equal to your Dexterity modifier.",
+      "source": "Player's Handbook, p. 97 (Thief Archetype)",
+      "wikidot_url": "https://dnd5e.wikidot.com/rogue:second-story-work"
+    },
+    {
+      "name": "Wizard",
+      "index": "wizard",
+      "description": "Wizards are supreme magic-users, defined and united as a class by the spells they cast. Drawing on the subtle weave of magic that permeates the cosmos, wizards cast spells of explosive fire, arcing lightning, subtle deception, brute-force mind control, and much more.\n\nYou must have an Intelligence score of 13 or higher in order to multiclass in or out of this class.\n\nThe Wizard\nSpell Slots per Spell Level\n\nLevel\nProficiency Bonus\nFeatures\nCantrips Known\n1st\n2nd\n3rd\n4th\n5th\n6th\n7th\n8th\n9th\n\n1st\n+2\nSpellcasting, Arcane Recovery\n3\n2\n-\n-\n-\n-\n-\n-\n-\n-\n\n2nd\n+2\nArcane Tradition\n3\n3\n-\n-\n-\n-\n-\n-\n-\n-\n\n3rd\n+2\nCantrip Formulas (Optional)\n3\n4\n2\n-\n-\n-\n-\n-\n-\n-\n\n4th\n+2\nAbility Score Improvement\n4\n4\n3\n-\n-\n-\n-\n-\n-\n-\n\n5th\n+3\n\n4\n4\n3\n2\n-\n-\n-\n-\n-\n-\n\n6th\n+3\nArcane Tradition feature\n4\n4\n3\n3\n-\n-\n-\n-\n-\n-\n\n7th\n+3\n\n4\n4\n3\n3\n1\n-\n-\n-\n-\n-\n\n8th\n+3\nAbility Score Improvement\n4\n4\n3\n3\n2\n-\n-\n-\n-\n-\n\n9th\n+4\n\n4\n4\n3\n3\n3\n1\n-\n-\n-\n-\n\n10th\n+4\nArcane Tradition feature\n5\n4\n3\n3\n3\n2\n-\n-\n-\n-\n\n11th\n+4\n\n5\n4\n3\n3\n3\n2\n1\n-\n-\n-\n\n12th\n+4\nAbility Score Improvement\n5\n4\n3\n3\n3\n2\n1\n-\n-\n-\n\n13th\n+5\n\n5\n4\n3\n3\n3\n2\n1\n1\n-\n-\n\n14th\n+5\nArcane Tradition feature\n5\n4\n3\n3\n3\n2\n1\n1\n-\n-\n\n15th\n+5\n\n5\n4\n3\n3\n3\n2\n1\n1\n1\n-\n\n16th\n+5\nAbility Score Improvement\n5\n4\n3\n3\n3\n2\n1\n1\n1\n-\n\n17th\n+6\n\n5\n4\n3\n3\n3\n2\n1\n1\n1\n1\n\n18th\n+6\nSpell Mastery\n5\n4\n3\n3\n3\n3\n1\n1\n1\n1\n\n19th\n+6\nAbility Score Improvement\n5\n4\n3\n3\n3\n3\n2\n1\n1\n1\n\n20th\n+6\nSignature Spells\n5\n4\n3\n3\n3\n3\n2\n2\n1\n1\n\nClass Features\n\nAs a wizard, you gain the following class features.\nHit Points\n\nHit Dice: 1d6 per wizard level\n\nHit Points at 1st Level: 6 + your Constitution modifier\n\nHit Points at Higher Levels: 1d6 (or 4) + your Constitution modifier per wizard level after 1st\nProficiencies\n\nArmor: None\n\nWeapons: Daggers, darts, slings, quarterstaffs, light crossbows\n\nTools: None\n\nSaving Throws: Intelligence, Wisdom\n\nSkills: Choose two from Arcana, History, Insight, Investigation, Medicine, and Religion\nEquipment\n\nYou start with the following equipment, in addition to the equipment granted by your background:\n\n(a) a quarterstaff or (b) a dagger\n\n(a) a component pouch or (b) an arcane focus\n\n(a) a scholar's pack or (b) an explorer's pack\n\nA spellbook\n\nSpellcasting\n\nAs a student of arcane magic, you have a spellbook containing spells that show the first glimmerings of your true power.\nCantrips\n\nAt 1st level, you know three cantrips of your choice from the wizard spell list. You learn additional wizard cantrips of your choice at higher levels, as shown in the Cantrips Known column of the Wizard table.\nSpellbook\n\nAt 1st level, you have a spellbook containing six 1st-level wizard spells of your choice. Your spellbook is the repository of the wizard spells you know, except your cantrips, which are fixed in your mind.\n\nThe spells that you add to your spellbook as you gain levels reflect the arcane research you conduct on your own, as well as intellectual breakthroughs you have had about the nature of the multiverse. You might find other spells during your adventures. You could discover a spell recorded on a scroll in an evil wizard's chest, for example, or in a dusty tome in an ancient library.\n\nCopying a Spell into the Book. When you find a wizard spell of 1st level or higher, you can add it to your spellbook if it is of a spell level you can prepare and if you can spare the time to decipher and copy it.\n\nCopying a spell into your spellbook involves reproducing the basic form of the spell, then deciphering the unique system of notation used by the wizard who wrote it. You must practice the spell until you understand the sounds or gestures required, then transcribe it into your spellbook using your own notation.\n\nFor each level of the spell, the process takes 2 hours and costs 50 gp. The cost represents material components you expend as you experiment with the spell to master it, as well as the fine inks you need to record it. Once you have spent this time and money, you can prepare the spell just like your other spells.\n\nReplacing the Book. You can copy a spell from your own spellbook into another book-for example, if you want to make a backup copy of your spellbook. This is just like copying a new spell into your spellbook, but faster and easier, since you understand your own notation and already know how to cast the spell. You need spend only 1 hour and 10 gp for each level of the copied spell.\n\nIf you lose your spellbook, you can use the same procedure to transcribe the spells that you have prepared into a new spellbook. Filling out the remainder of your spellbook requires you to find new spells to do so, as normal. For this reason, many wizards keep backup spellbooks in a safe place.\n\nThe Book's Appearance. Your spellbook is a unique compilation of spells, with its own decorative flourishes and margin notes. It might be a plain, functional leather volume that you received as a gift from your master, a finely bound gilt-edged tome you found in an ancient library or even a loose collection of notes scrounged together after you lost your previous spellbook in a mishap.\nPreparing and Casting Spells\n\nThe Wizard table shows how many spell slots you have to cast your wizard spells of 1st level and higher. To cast one of these spells, you must expend a slot of the spell's level or higher. You regain all expended spell slots when you finish a long rest.\n\nYou prepare the list of wizard spells that are available for you to cast. To do so, choose a number of wizard spells from your spellbook equal to your Intelligence modifier + your wizard level (minimum of one spell). The spells must be of a level for which you have spell slots.\n\nFor example, if you're a 3rd-level wizard, you have four 1st-level and two 2nd-level spell slots. With an Intelligence of 16, your list of prepared spells can include six spells of 1st or 2nd level, in any combination, chosen from your spellbook. If you prepare the 1st-level spell magic missile, you can cast it using a 1st-level or a 2nd-level slot. Casting the spell doesn't remove it from your list of prepared spells.\n\nYou can change your list of prepared spells when you finish a long rest. Preparing a new list of wizard spells requires time spent studying your spellbook and memorizing the incantations and gestures you must make to cast the spell: at least 1 minute per spell level for each spell on your list.\nSpellcasting Ability\n\nIntelligence is your spellcasting ability for your wizard spells, since you learn your spells through dedicated study and memorization. You use your Intelligence whenever a spell refers to your spellcasting ability. In addition, you use your Intelligence modifier when setting the saving throw DC for a wizard spell you cast and when making an attack roll with one.\n\nSpell save DC = 8 + your proficiency bonus + your Intelligence modifier\n\nSpell attack modifier = your proficiency bonus + your Intelligence modifier\nRitual Casting\n\nYou can cast a wizard spell as a ritual if that spell has the ritual tag and you have the spell in your spellbook. You don't need to have the spell prepared.\nSpellcasting Focus\n\nYou can use an arcane focus as a spellcasting focus for your wizard spells.\nLearning Spells of 1st Level and Higher\n\nEach time you gain a wizard level, you can add two wizard spells of your choice to your spellbook. Each of these spells must be of a level for which you have spell slots, as shown on the Wizard table. On your adventures, you might find other spells that you can add to your spellbook.\n\nArcane Recovery\n\nYou have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The spell slots can have a combined level that is equal to or less than half your wizard level (rounded up), and none of the slots can be 6th level or higher.\n\nFor example, if you're a 4th-level wizard, you can recover up to two levels worth of spell slots. You can recover either a 2nd-level spell slot or two 1st-level spell slots.\n\nArcane Tradition\n\nWhen you reach 2nd level, you choose an arcane tradition, shaping your practice of magic through one of the following schools. Your choice grants you features at 2nd level and again at 6th, 10th, and 14th level.\n\nSchool\nSource\n\nAbjuration\nPlayer's Handbook\n\nBladesinging\nSword Coast Adventurer's Guide\n\nTasha's Cauldron of Everything\n\nChronurgy\nExplorer's Guide to Wildemount\n\nConjuration\nPlayer's Handbook\n\nDivination\nPlayer's Handbook\n\nEnchantment\nPlayer's Handbook\n\nEvocation\nPlayer's Handbook\n\nGraviturgy\nExplorer's Guide to Wildemount\n\nIllusion\nPlayer's Handbook\n\nNecromancy\nPlayer's Handbook\n\nOrder of Scribes\nTasha's Cauldron of Everything\n\nTransmutation\nPlayer's Handbook\n\nWar Magic\nXanathar's Guide to Everything\n\nUnearthed Arcana\n\nRunecrafter\nUnearthed Arcana 83 - Giant Options\n\nArchived Unearthed Arcana\n\nArtificer\nUnearthed Arcana 1 - Eberron\n\nInvention\nUnearthed Arcana 46 - Three Subclasses\n\nLore Mastery\nUnearthed Arcana 29 - Warlock and Wizard\n\nMage of Lorehold\nUnearthed Arcana 79 - Mages of Strixhaven\n\nMage of Prismari\nUnearthed Arcana 79 - Mages of Strixhaven\n\nMage of Quandrix\nUnearthed Arcana 79 - Mages of Strixhaven\n\nMage of Silverquill\nUnearthed Arcana 79 - Mages of Strixhaven\n\nOnomancy\nUnearthed Arcana 63 - Cleric, Druid, Wizard\n\nOrder of Scribes\nUnearthed Arcana 72 - Subclasses Revisited\n\nPsionics\nUnearthed Arcana 66 - Fighter, Rogue, Wizard\n\nTechnomancy\nUnearthed Arcana 7 - Modern Magic\n\nTheurgy\nUnearthed Arcana 33 - Wizard Revisited\n\nCantrip Formulas (Optional)\n\nAt 3rd level, you have scribed a set of arcane formulas in your spellbook that you can use to formulate a cantrip in your mind. Whenever you finish a long rest and consult those formulas in your spellbook, you can replace one wizard cantrip you know with another cantrip from the wizard spell list.\n\nAbility Score Improvement\n\nWhen you reach 4th level, and again at 8th, 12th, 16th, and 19th level, you can increase one ability score of your choice by 2, or you can increase two ability scores of your choice by 1. As normal, you can't increase an ability score above 20 using this feature.\n\nSpell Mastery\n\nAt 18th level, you have achieved such mastery over certain spells that you can cast them at will. Choose a 1st-level wizard spell and a 2nd-level wizard spell that are in your spellbook. You can cast those spells at their lowest level without expending a spell slot when you have them prepared. If you want to cast either spell at a higher level, you must expend a spell slot as normal.\n\nBy spending 8 hours in study, you can exchange one or both of the spells you chose for different spells of the same levels.\n\nSignature Spells\n\nWhen you reach 20th level, you gain mastery over two powerful spells and can cast them with little effort. Choose two 3rd-level wizard spells in your spellbook as your signature spells. You always have these spells prepared, they don't count against the number of spells you have prepared, and you can cast each of them once at 3rd level without expending a spell slot. When you do so, you can't do so again until you finish a short or long rest.\n\nIf you want to cast either spell at a higher level, you must expend a spell slot as normal.",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/wizard",
+      "class": ""
+    },
+    {
+      "name": "High Elf (Elf) Racial",
+      "index": "high-elf-elf-racial",
+      "description": "See full description at https://dnd5e.wikidot.com/high-elf-elf-racial",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/high-elf-elf-racial",
+      "class": ""
+    },
+    {
+      "name": "Sage Background",
+      "index": "sage-background",
+      "description": "See full description at https://dnd5e.wikidot.com/sage-background",
+      "source": "dnd5e.wikidot.com (auto-fetched)",
+      "wikidot_url": "https://dnd5e.wikidot.com/sage-background",
+      "class": ""
+    }
+  ]
+}

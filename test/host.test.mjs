@@ -92,12 +92,19 @@ writeFileSync(path.join(tempRoot, '.runtime', 'active-campaign.json'),
 /** Map the production data root onto the temp tree, preserving path shape. */
 const remap = (p) => String(p)
   // The bundled SRD datasets are CODE, not campaign data (see shared.mjs:
-  // SKILL_ROOT is the code root, DND_ROOT the data root). They are read-only
-  // reference data this suite legitimately reads in place: `dnd_srd_lookup` is
-  // a pure lookup over a shipped dataset, and its output cannot be affected by
-  // anything under campaigns/. Redirecting them would test a copy, not the
-  // artifact that ships.
+  // DATA_ROOT is the package's own data dir, DND_ROOT the campaign data root).
+  // They are read-only reference data this suite legitimately reads in place:
+  // `dnd_srd_lookup` is a pure lookup over a shipped dataset, and its output
+  // cannot be affected by anything under campaigns/. Redirecting them would
+  // test a copy, not the artifact that ships.
+  //
+  // The datasets moved from `D:/DND/.agents/skills/dnd/data/` into the bundle
+  // itself, so the exemption now names the package-relative location. It is no
+  // longer under D:\DND at all, but the remap below still has to be explicit
+  // about it: `D:/DND/dsh-dnd-bundle/data` would otherwise be caught by the
+  // `^D:\/DND\/campaigns` rules only by luck, and the intent would be lost.
   .replace(/^D:\/DND\/\.agents\/skills\/dnd\/data/i, (m) => m)
+  .replace(/^D:\/DND\/dsh-dnd-bundle\/data/i, (m) => m)
   .replace(/^D:\/DND\/campaigns\/testcamp/i, (m) => m)
   .replace(/^D:\/DND\/campaigns/i, tempCampaigns)
   .replace(/^D:\/DND\/\.runtime/i, tempRuntime)
@@ -213,18 +220,37 @@ const ctx = {
 
 const host = await import('../src/host/index.mjs')
 
+/**
+ * How many tools a full mount should register.
+ *
+ * Summed from the module's own `FAMILIES`, so adding a tool family does not
+ * require editing an assertion — and, more importantly, so the assertion cannot
+ * silently pass by having been updated to whatever the code now produces. It
+ * still fails if a family mounts nothing or throws.
+ */
+function expectedToolCount() {
+  return host.FAMILIES.reduce((total, family) => {
+    const built = family.buildTools({ get: () => undefined })
+    return total + built.length
+  }, 0)
+}
+
 console.log('host coordinator:')
 
 await test('apply() registers every family', async () => {
   const dispose = host.apply(ctx)
   assert.equal(typeof dispose, 'function', 'apply must return a disposer function')
   const names = registered.map((t) => t.name).sort()
-  const expected = [
-    'dnd_arc_status', 'dnd_attack', 'dnd_campaign_search', 'dnd_campaign_state',
-    'dnd_character_get', 'dnd_check', 'dnd_dc', 'dnd_mastery', 'dnd_roll',
-    'dnd_save', 'dnd_spend', 'dnd_srd_lookup', 'dnd_track', 'dnd_xp_add',
-  ]
+  // Derived from FAMILIES rather than listed literally. The literal roster was
+  // 14 names and had to be hand-edited by every task that added a tool, which
+  // is how an assertion stops describing an invariant and starts describing a
+  // snapshot. What matters is: the mount registers EXACTLY the tools the
+  // families declare — no family silently dropped, none registered twice.
+  const expected = host.FAMILIES
+    .flatMap((family) => family.buildTools({ get: () => undefined }).map((t) => t.name))
+    .sort()
   assert.deepEqual(names, expected, 'registered roster drifted:\n  got      ' + names.join(', ') + '\n  expected ' + expected.join(', '))
+  assert.equal(new Set(names).size, names.length, 'a tool name was registered twice: ' + names.join(', '))
   assert.deepEqual(warnings, [], 'no family should have failed: ' + warnings.join('; '))
 })
 
@@ -353,6 +379,45 @@ await test('dnd_srd_lookup reports an honest miss', async () => {
   assert.match(out, /No SRD entry matches/, out)
 })
 
+await test('dnd_srd_lookup reads the datasets the PACKAGE ships, for both rulesets', async () => {
+  // The defect this pins: the datasets were read from the installed skill's
+  // code root, which the user deleted on purpose. The tool then answered
+  // "dataset not found" for data that was merely somewhere else. Asserting a
+  // real ENTRY for each ruleset proves the dataset was found AND parsed —
+  // a path fix that forgot to ship the files would still fail here.
+  for (const ruleset of ['2014', '2024']) {
+    const out = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster', ruleset })
+    assert.match(out, new RegExp(`\\[ruleset ${ruleset}\\]`), out)
+    assert.match(out, /goblin/i, `ruleset ${ruleset} returned no entry: ${out}`)
+    assert.ok(!/dataset missing/i.test(out), `ruleset ${ruleset} could not find its dataset: ${out}`)
+  }
+})
+
+await test('a missing dataset is distinguishable from a missing entry', async () => {
+  // These two used to read alike ("not found"), which is how a broken install
+  // passed for an ordinary miss. A DM must be able to tell "the lookup table is
+  // not installed" from "that spell is not in the table", because only one of
+  // them is fixable by retrying something else.
+  const miss = await call('dnd_srd_lookup', { query: 'zzzznotathing' })
+  assert.match(miss, /\[no match\]/, miss)
+  assert.match(miss, /dataset was searched/, miss)
+  assert.ok(!/dataset missing/i.test(miss), 'an ordinary miss must not claim the dataset is missing')
+
+  // Now hide the dataset and require the OTHER message. The stamp is what the
+  // cache keys on, so a missing file cannot be served from the cache.
+  const realStat = fsService.stat
+  fsService.stat = async (t) => (/dnd5e_srd\.json$/.test(String(t.displayPath)) ? undefined : realStat.call(fsService, t))
+  try {
+    const absent = await call('dnd_srd_lookup', { query: 'goblin', ruleset: '2014' })
+    assert.match(absent, /\[dataset missing\]/, absent)
+    assert.match(absent, /not that the entry does not exist/, absent)
+    assert.match(absent, /To fix:/, 'a broken install must say how to fix it: ' + absent)
+    assert.ok(!/\[no match\]/.test(absent), 'an absent dataset must not be reported as a failed search')
+  } finally {
+    fsService.stat = realStat
+  }
+})
+
 await test('dnd_character_get returns JSON for a real character', async () => {
   const out = await call('dnd_character_get', { character: 'alice' })
   const parsed = JSON.parse(out)
@@ -407,7 +472,14 @@ await test('fs-backed tools work when fs appears AFTER apply()', async () => {
   assert.equal(typeof dispose, 'function')
 
   // Every tool registered even though fs is absent: nothing was gated on it.
-  assert.equal(late.length, 14, 'all 14 tools must register without fs; got ' + late.length)
+  //
+  // The expected count is DERIVED from the module's own FAMILIES list, not
+  // hard-coded. It was a literal 14 until T8/T9/T10 each added a family, which
+  // would have made this suite fail for three intended changes. The invariant
+  // worth asserting is "every family's tools mounted", not a fixed number.
+  const expectedTools = expectedToolCount()
+  assert.equal(late.length, expectedTools,
+    'all ' + expectedTools + ' tools must register without fs; got ' + late.length)
 
   const before = late.find((t) => t.name === 'dnd_character_get')
   assert.match(String(await before.execute({ character: 'alice' })), /fs service unavailable/,
@@ -453,7 +525,7 @@ await test('a missing webServer does not stop the tools from registering', async
   const mod = await import('../src/host/index.mjs?no-webserver')
   const dispose = mod.apply(ctxNoWeb)
   assert.equal(typeof dispose, 'function')
-  assert.equal(late.length, 14, 'all 14 tools must still register without a web server')
+  assert.equal(late.length, expectedToolCount(), 'all tools must still register without a web server')
 })
 
 /** A ctx whose inject() delivers a scoped child context, as Cordis does. */

@@ -11,14 +11,37 @@
  * row is evaluated by the host loader and must use the injected services.
  */
 
-/** Data root. Campaigns and characters live here; scripts/ and data/ do not. */
+/** Data root. Campaigns and characters live here; the plugin's data/ does not. */
 export const DND_ROOT = 'D:/DND'
 
 /** Written at /dm:dnd load; tells every tool which campaign is in play. */
 export const ACTIVE_MARKER = DND_ROOT + '/.runtime/active-campaign.json'
 
-/** Skill root — the bundled SRD datasets live under here. */
-export const SKILL_ROOT = DND_ROOT + '/.agents/skills/dnd'
+/**
+ * The bundle's own `data/` directory — the SRD datasets the package ships.
+ *
+ * These datasets used to be read out of `D:/DND/.agents/skills/dnd/data/`, the
+ * installed skill's CODE root. That skill was deleted deliberately, which left
+ * `dnd_srd_lookup` reporting "SRD dataset not found" for a dataset that was
+ * merely somewhere else. The real defect was the ownership model: a shipped
+ * lookup table is a dependency OF THIS PLUGIN, so it belongs inside the
+ * package, not in the campaign workspace where any cleanup can take it away.
+ *
+ * Resolved from `import.meta.url` rather than from a configured root, because
+ * the row mounts by bare package name and this file IS the anchor: wherever the
+ * package is installed (here a `link:` junction, later a registry tarball),
+ * `data/` is two directories up from `lib/host/tools/`. A configured path would
+ * reintroduce exactly the failure this replaced — a location that is correct
+ * only for one machine's layout.
+ *
+ * `import.meta` is a language feature, not an imported builtin, so this module
+ * still imports nothing (see above). The `data/` dir is plain data, not code:
+ * scripts/build.mjs copies only `src/host/**.mjs` into `lib/`, so it must live
+ * at the package root to survive a build.
+ */
+export const DATA_ROOT = new URL('../../../data', import.meta.url).pathname
+  // Windows: URL pathnames are `/D:/...`; the fs service wants `D:/...`.
+  .replace(/^\/([A-Za-z]:)/, '$1')
 
 /**
  * Strip a leading UTF-8 BOM.

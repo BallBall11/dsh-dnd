@@ -134,6 +134,12 @@ const ALLOWED = {
     reason: 'checks the rendered panel against whatever the live campaign shows; reports PASS/FAIL, '
       + 'does not throw, and is not wired into npm run check',
   },
+  'test/write-errors.test.mjs': {
+    rule: 'parser',
+    reason: 'the live references are sample STRINGS passed to describeWriteRefusal() to pin the '
+      + 'wording of a refusal message; the suite writes only to its own mkdtemp tree and a leak '
+      + 'guard fails the run if any mock resolves outside it',
+  },
   'scripts/audit-test-ownership.mjs': {
     rule: 'self',
     reason: 'this audit; its patterns and allowlist necessarily name the paths it looks for',

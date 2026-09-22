@@ -16,6 +16,7 @@
   },
   "files": [
     "lib",
+    "data",
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md"
@@ -37,7 +38,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node test/state-schema.test.mjs && node test/state-rules.test.mjs && node test/frontmatter.test.mjs && node test/sheet-split.test.mjs && node test/state-io.test.mjs && node test/sheet-parse.test.mjs && node test/routes.test.mjs && node test/client-host-contract.test.mjs && node test/host.test.mjs && node test/tool-args.test.mjs && node test/build-strip.test.mjs && node test/build.test.mjs",
+    "test": "node test/state-schema.test.mjs && node test/state-rules.test.mjs && node test/frontmatter.test.mjs && node test/sheet-split.test.mjs && node test/state-io.test.mjs && node test/sheet-parse.test.mjs && node test/routes.test.mjs && node test/client-host-contract.test.mjs && node test/host.test.mjs && node test/tool-args.test.mjs && node test/session-scope.test.mjs && node test/character-target.test.mjs && node test/calendar.test.mjs && node test/initiative.test.mjs && node test/effects-rules.test.mjs && node test/encounter-effects.test.mjs && node test/write-errors.test.mjs && node test/build-strip.test.mjs && node test/build.test.mjs",
     "test:writes": "node scripts/write-tools-scenario.mjs",
     "test:concurrency": "node scripts/concurrency-scenario.mjs",
     "test:ownership": "node scripts/audit-test-ownership.mjs",
