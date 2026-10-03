@@ -6,6 +6,19 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Cards now carry a kind, and the panel lists PCs only.** A field session
+  created a hostile statblock with `dnd_character_create` and it appeared in
+  the player's panel beside the party: the tool stamped every card `pc` and
+  nothing consumed the tag. `dnd_character_create` now takes
+  `kind: "pc" | "npc" | "enemy"` (default `pc`, always the first frontmatter
+  tag), and `GET /dnd/characters` excludes any card whose tags omit `pc` —
+  counted in `counts.excludedNonPC`, still readable via `dnd_character_get`
+  and trackable via `dnd_track`. Cards written before this existed have no
+  tags and keep counting as PCs. The GM preset's persona now requires the
+  kind on every create.
+
 ### Fixed
 
 - **The panel now serves the live session workspace, not the process

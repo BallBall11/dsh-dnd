@@ -231,6 +231,34 @@ await test('an unmigrated character reports needsMigration', async () => {
   assert.equal(alice.hasStateFile, false)
 })
 
+await test('a card tagged without pc is excluded from the panel list', async () => {
+  // The campaign characters/ directory hosts monster statblocks too; the
+  // frontmatter `tags` are the PC/monster distinction, and the panel is the
+  // PC panel. A card written before the distinction existed has no tags and
+  // must still count as a PC.
+  writeFileSync(nodePath(`${campaignsDir}/alpha/characters/goblin-warrior.md`), `---
+player:
+campaign: alpha
+updated: 2026-09-04
+worldTime:
+tags: [monster]
+---
+
+# Goblin Warrior
+**Race:** Goblin | **Class:** Fighter | **Level:** 1
+
+## Combat Stats
+**HP:** 7 / 7 | **Temp HP:** 0 | **AC:** 15 | **Initiative:** +2 | **Speed:** 30 ft
+`, 'utf8')
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  assert.equal(body.characters.some((c) => c.name === 'goblin-warrior'), false,
+    JSON.stringify(body.characters.map((c) => c.name)))
+  assert.equal(body.counts.excludedNonPC, 1)
+  assert.ok(body.characters.some((c) => c.name === 'alice'),
+    'a tagless card still counts as a PC (backwards compatibility)')
+})
+
+
 await test('an invalid state is reported, not hidden', async () => {
   const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
   const broken = body.characters.find((c) => c.name === 'broken')
