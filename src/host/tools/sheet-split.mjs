@@ -535,9 +535,12 @@ export function renderSummaryBlock(state) {
     const mod = Math.floor((score - 10) / 2)
     return `${k} ${score} (${mod >= 0 ? '+' : ''}${mod})`
   }
-  const hp = s.combat.hp.current !== null ? `${s.combat.hp.current}/${s.combat.hp.max}` : '—'
-  const ac = s.combat.ac !== null
-    ? `${s.combat.ac}${s.combat.mageArmorAc !== null ? ` (Mage Armor ${s.combat.mageArmorAc})` : ''}`
+  const hp = s.combat.hp?.current != null ? `${s.combat.hp.current}/${s.combat.hp.max}` : '—'
+  // `!= null` on purpose: a hand-built state can carry `undefined` (not null)
+  // for mageArmorAc, and `!== null` then spliced the literal text
+  // "(Mage Armor undefined)" into every card without that spell.
+  const ac = s.combat.ac != null
+    ? `${s.combat.ac}${s.combat.mageArmorAc != null ? ` (Mage Armor ${s.combat.mageArmorAc})` : ''}`
     : '—'
   const slots = Object.keys(s.spellSlots).length > 0
     ? Object.entries(s.spellSlots)

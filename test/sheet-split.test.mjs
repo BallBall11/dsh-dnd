@@ -208,6 +208,16 @@ test('a file with no frontmatter does not gain an empty one', () => {
 })
 
 // --- the core guarantee ---------------------------------------------------
+test('the summary block never spells "undefined" for an absent mageArmorAc', () => {
+  const { state } = splitSheet(ALICE)
+  const bare = normalizeState({ name: 'X', combat: { ac: 16 } })
+  const noHp = renderSummaryBlock(normalizeState({ name: 'X', combat: { ac: 16 } }))
+  assert.ok(!noHp.includes('undefined'), noHp)
+  const text = renderSummaryBlock(bare)
+  assert.ok(!text.includes('undefined'), text)
+  assert.ok(text.includes('AC 16'), text)
+})
+
 test('narrative excludes every structured section', () => {
   const { narrative } = splitSheet(ALICE)
   for (const gone of ['## Ability Scores', '## Combat Stats', '## Skills', '## Spell Slots', '## Equipment']) {

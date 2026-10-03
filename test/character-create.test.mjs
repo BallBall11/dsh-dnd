@@ -171,4 +171,44 @@ await test('creation without an active campaign says so', async () => {
   assert.match(out, /No active campaign/)
 })
 
+await test('ability keys are case-insensitive ("str" means STR)', async () => {
+  const out = await tool.execute({
+    name: 'CaseTest', klass: 'Fighter', level: 1, hp: 12, ac: 16,
+    abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 8 },
+  }, exec)
+  assert.match(out, /Created CaseTest/)
+  const c = await readCharacter(fs, charactersDir, 'casetest')
+  const s = c.state
+  assert.equal(s.abilities.STR, 16, 'lowercase keys must land as scores, not vanish into the default 10')
+  assert.equal(s.abilities.CHA, 8)
+  assert.equal(s.saves.STR, 5, 'derived saves must see the normalized score')
+  assert.equal(s.combat.initiative, 1, 'DEX +1 drives initiative')
+})
+
+await test('an unrecognized ability key refuses the WHOLE create — no silent 10s', async () => {
+  const before = new Set(readdirSync(nodePath(charactersDir)))
+  const out = await tool.execute({
+    name: 'SilentTen', klass: 'Fighter', level: 1,
+    abilities: { STR: 16, strength: 18, DEX: 12 },
+  }, exec)
+  assert.match(out, /refused/)
+  assert.match(out, /unrecognized ability key "strength"/)
+  assert.match(out, /Nothing was written/)
+  const after = new Set(readdirSync(nodePath(charactersDir)))
+  assert.deepEqual([...after].filter((f) => !before.has(f)), [], 'no file may appear for a refused create')
+})
+
+await test('a non-numeric ability value refuses the create too', async () => {
+  const out = await tool.execute({ name: 'NaN', abilities: { STR: 'sixteen' } }, exec)
+  assert.match(out, /refused/)
+  assert.match(out, /is not a number/)
+})
+
+await test('an unknown skill name warns instead of vanishing', async () => {
+  const out = await tool.execute({ name: 'SkillWarn', skills: ['Arcana', 'Dragonology'] }, exec)
+  assert.match(out, /WARNING: these skill names were not recognized/)
+  assert.match(out, /Dragonology/)
+  assert.match(out, /Arcana \+2/)
+})
+
 console.log(process.exitCode === 1 ? '\ncharacter-create.test.mjs: FAILURE(S)' : '\ncharacter-create.test.mjs: all assertions passed')

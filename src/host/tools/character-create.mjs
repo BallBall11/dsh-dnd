@@ -199,11 +199,31 @@ export function buildTools(ctx) {
       const prof = proficiencyBonus(level)
       const skeleton = await classSkeleton(fs, args.klass)
 
-      const scoreOf = (k) => {
-        const v = Number(args.abilities?.[k])
-        return Number.isFinite(v) ? Math.min(30, Math.max(1, Math.round(v))) : 10
+      // Ability keys are normalized case-insensitively ("str" and "STR" are
+      // the same score). A key that is still unrecognized — or a value that is
+      // not a number — refuses the WHOLE create rather than handing the player
+      // a card whose six modifiers are silently all +0: a plausible wrong card
+      // is the one failure this bundle never ships on purpose. Scores the DM
+      // genuinely omits default to 10; that is a choice, not a miss.
+      const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
+      const givenAbilities = args.abilities !== null && typeof args.abilities === 'object' ? args.abilities : {}
+      const provided = {}
+      const rejected = []
+      for (const [key, value] of Object.entries(givenAbilities)) {
+        const upper = String(key).toUpperCase()
+        const score = Number(value)
+        if (ABILITY_KEYS.includes(upper) && Number.isFinite(score)) {
+          provided[upper] = score
+        } else {
+          rejected.push(ABILITY_KEYS.includes(upper) ? `${key}: "${value}" is not a number` : `unrecognized ability key "${key}"`)
+        }
       }
-      const abilities = Object.fromEntries(['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].map((k) => [k, scoreOf(k)]))
+      if (rejected.length > 0) {
+        return 'dnd_character_create refused — the abilities argument was not understood, and guessing would silently produce a card with wrong modifiers. '
+          + rejected.join('; ') + '. '
+          + 'Ability keys are STR/DEX/CON/INT/WIS/CHA, case-insensitive ("str" works). Nothing was written.'
+      }
+      const abilities = Object.fromEntries(ABILITY_KEYS.map((k) => [k, provided[k] !== undefined ? Math.min(30, Math.max(1, Math.round(provided[k]))) : 10]))
 
       const dexMod = mod(abilities.DEX)
       const saveMods = Object.fromEntries(['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].map((k) => [k, mod(abilities[k])]))
@@ -214,12 +234,18 @@ export function buildTools(ctx) {
         .map((k) => [k, saveMods[k] + (proficientSaves.includes(k) ? prof : 0)]))
 
       // Skill names arrive in display form ("Animal Handling") and are stored
-      // in state under their CamelCase key with the derived bonus.
+      // in state under their CamelCase key with the derived bonus. A name the
+      // table does not know is NOT skipped silently — the DM asked for a
+      // proficiency and must hear that it was not applied.
       const skills = {}
+      const unknownSkills = []
       for (const raw of Array.isArray(args.skills) ? args.skills : []) {
         const key = SKILL_ALIASES[String(raw).trim().toLowerCase()] ?? String(raw).replace(/\s+/g, '')
         const ability = SKILL_ABILITY[key]
-        if (ability === undefined) continue
+        if (ability === undefined) {
+          unknownSkills.push(String(raw))
+          continue
+        }
         skills[key] = { ability, bonus: mod(abilities[ability]) + prof, proficient: true }
       }
 
@@ -254,6 +280,10 @@ export function buildTools(ctx) {
           hp: hpMax === null ? {} : { current: hpCurrent, max: hpMax },
           tempHp: 0,
           ac: Number.isFinite(Number(args.ac)) ? Math.floor(Number(args.ac)) : null,
+          // Explicit null, not absent: the summary renderer spells the literal
+          // text "(Mage Armor undefined)" onto every card when this field is
+          // merely missing. A created card always carries the field.
+          mageArmorAc: null,
           initiative: Number.isFinite(Number(args.initiative)) ? Math.floor(Number(args.initiative)) : dexMod,
           speed: Number.isFinite(Number(args.speed)) ? Math.floor(Number(args.speed)) : 30,
           hitDice: {
@@ -305,6 +335,11 @@ export function buildTools(ctx) {
           : 'No spellcasting ability given — pass spellAbility to derive DC/attack.',
         'Files: ' + written.written.state + ' and ' + written.written.sheet,
       ]
+      if (unknownSkills.length > 0) {
+        lines.push('WARNING: these skill names were not recognized and no proficiency was applied: '
+          + unknownSkills.join(', ') + '. Known names: '
+          + Object.keys(SKILL_ABILITY).map((k) => k.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ') + '.')
+      }
       if (written.warnings.length > 0) lines.push('Warnings: ' + written.warnings.join(' '))
       return lines.join('\n')
     },

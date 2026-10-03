@@ -6,6 +6,24 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`dnd_character_create` no longer accepts an `abilities` object it cannot
+  understand.** Ability keys are normalized case-insensitively (`str` and
+  `STR` are the same score — the field report showed lowercase keys landing
+  as silent 10s with every derived modifier at +0 and no warning). A key that
+  is still unrecognized, or a value that is not a number, now refuses the
+  WHOLE create: a plausible card with wrong numbers is the one failure this
+  bundle never ships. Genuinely omitted scores still default to 10 by choice.
+- The same silent-loss class is closed for skills: an unknown skill name now
+  produces a WARNING naming the skipped entry and the accepted names, instead
+  of vanishing.
+- The generated summary block no longer splices the literal text
+  "(Mage Armor undefined)" onto every card whose state merely lacks the
+  `mageArmorAc` field (a hand-built state carries `undefined`, not `null`);
+  the create tool also writes the field explicitly, and an absent HP object
+  renders as `—` rather than `undefined/undefined`.
+
 ### Added
 
 - **`dnd_character_create`** closes the empty-campaign gap that stalled a real
