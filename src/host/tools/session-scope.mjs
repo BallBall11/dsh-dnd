@@ -66,7 +66,7 @@
  *     process root is still refused, exactly as before
  *
  * The alternative, defaulting to `danger-full-access` or to a hard-coded
- * `D:/DND`, would trade a visible refusal for an invisible bypass. This bundle
+ * a hard-coded workspace, would trade a visible refusal for an invisible bypass. This bundle
  * is invoked with no agent in plenty of legitimate places (unit tests calling
  * `execute(args)` directly, for one), so the degraded path must be safe rather
  * than merely unlikely.

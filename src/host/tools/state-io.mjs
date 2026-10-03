@@ -162,7 +162,7 @@ export async function readCharacter(fs, dir, name) {
  * `fs.writeText`. That argument decides WHICH ROOT the write is judged
  * against, and omitting it is the defect this bundle shipped with: the fs
  * sandbox then falls back to a root derived from the harness process's cwd, so
- * every campaign under `D:\DND` was refused no matter which campaign or which
+ * every campaign under the data root was refused no matter which campaign or which
  * session asked.
  *
  * The caller resolves it from the tool call's own session (see

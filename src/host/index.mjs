@@ -17,6 +17,7 @@
  *   tools/calendar.mjs  dnd_calendar
  *   tools/initiative.mjs  dnd_initiative dnd_initiative_end
  *   tools/effects.mjs   dnd_effect dnd_concentration dnd_death_save
+ *   tools/panel.mjs     dnd_panel_status
  *
  * track.mjs is the only family that writes. Everything above it is pure, which
  * is what lets the write path be reasoned about on its own.
@@ -29,6 +30,7 @@
 
 import * as roll from './tools/roll.mjs'
 import * as characterCreate from './tools/character-create.mjs'
+import * as panel from './tools/panel.mjs'
 import * as lookup from './tools/lookup.mjs'
 import * as campaign from './tools/campaign.mjs'
 import * as sheet from './tools/sheet.mjs'
@@ -48,7 +50,7 @@ import { createProbeState, setWriteProbeState } from './tools/write-probe.mjs'
  * change that was entirely intended. Deriving the number from this list keeps
  * "every family registered" as the actual invariant under test.
  */
-export const FAMILIES = [roll, lookup, campaign, sheet, characterCreate, track, calendar, initiative, effects]
+export const FAMILIES = [roll, lookup, campaign, sheet, characterCreate, track, calendar, initiative, effects, panel]
 
 export const name = 'dnd-host'
 

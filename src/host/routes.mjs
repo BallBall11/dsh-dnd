@@ -38,7 +38,7 @@
  */
 
 import { readCharacter, listCharacters } from './tools/state-io.mjs'
-import { activeCampaignDir, exists } from './tools/shared.mjs'
+import { activeCampaignDir, exists, routeRoot } from './tools/shared.mjs'
 import { validateState, formatFindings, formatCurrency } from './tools/state-rules.mjs'
 
 /** Route namespace. Kept under one prefix so the surface is obvious. */
@@ -60,11 +60,25 @@ export const ROUTES = [
 export function buildHandlers(ctx) {
   const getFs = () => ctx.get('fs')
 
-  /** Resolve the active campaign's character directory, or an error. */
+  /**
+   * Resolve the active campaign's character directory, or an error. The root
+   * comes from routeRoot() — the live session workspace — NEVER silently from
+   * the process fallback: `warnings` travels into every response so the panel
+   * says so when the fallback had to be used.
+   */
   async function locate() {
     const fs = getFs()
     if (fs === undefined) return { error: 'fs service unavailable', status: 503 }
-    const found = await activeCampaignDir(fs)
+    const origin = routeRoot(ctx)
+    const found = await activeCampaignDir(fs, { header: { cwd: origin.root } })
+    if (found === undefined) {
+      return {
+        error: 'No active campaign. Load one with /dm:dnd load <campaign> (this writes .runtime/active-campaign.json).',
+        status: 404,
+        warnings: origin.warnings,
+        rootSource: origin.source,
+      }
+    }
     if (found === undefined) {
       return {
         error: 'No active campaign. Load one with /dm:dnd load <campaign> (this writes .runtime/active-campaign.json).',
@@ -80,9 +94,11 @@ export function buildHandlers(ctx) {
       return {
         error: `Active campaign "${found.campaign}" has no directory at ${found.dir}. The marker in .runtime/active-campaign.json is stale.`,
         status: 404,
+        warnings: origin.warnings,
+        rootSource: origin.source,
       }
     }
-    return { fs, campaign: found.campaign, dir }
+    return { fs, campaign: found.campaign, dir, warnings: origin.warnings, rootSource: origin.source }
   }
 
   return {
@@ -96,7 +112,9 @@ export function buildHandlers(ctx) {
      */
     async [`${API_PREFIX}/characters`](req, res) {
       const found = await locate()
-      if (found.error !== undefined) return sendJson(res, found.status, { error: found.error })
+      if (found.error !== undefined) {
+        return sendJson(res, found.status, { error: found.error, warnings: found.warnings ?? [], rootSource: found.rootSource })
+      }
 
       const { fs, campaign, dir } = found
       const listed = await listCharacters(fs, dir)
@@ -132,7 +150,8 @@ export function buildHandlers(ctx) {
       sendJson(res, 200, {
         campaign,
         characters,
-        warnings,
+        warnings: [...(found.warnings ?? []), ...warnings],
+        rootSource: found.rootSource,
         // Reported so a client can tell an empty campaign from a broken one.
         counts: { characters: characters.length, withStateFile: characters.filter((c) => c.hasStateFile).length },
       })
@@ -144,9 +163,10 @@ export function buildHandlers(ctx) {
       if (fs === undefined) {
         return sendJson(res, 200, { ok: false, fs: false, campaign: null, reason: 'fs service unavailable' })
       }
-      const found = await activeCampaignDir(fs)
+      const origin = routeRoot(ctx)
+      const found = await activeCampaignDir(fs, { header: { cwd: origin.root } })
       if (found === undefined) {
-        return sendJson(res, 200, { ok: false, fs: true, campaign: null, reason: 'no active campaign' })
+        return sendJson(res, 200, { ok: false, fs: true, campaign: null, reason: 'no active campaign', warnings: origin.warnings, rootSource: origin.source })
       }
       // A marker without a directory is a distinct failure from no marker at
       // all: one means "load a campaign", the other means "the one you loaded
@@ -159,7 +179,7 @@ export function buildHandlers(ctx) {
           reason: `campaign directory missing: ${found.dir}`,
         })
       }
-      sendJson(res, 200, { ok: true, fs: true, campaign: found.campaign })
+      sendJson(res, 200, { ok: true, fs: true, campaign: found.campaign, rootSource: origin.source, warnings: origin.warnings })
     },
   }
 }

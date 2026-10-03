@@ -6,6 +6,36 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The panel now serves the live session workspace, not the process
+  fallback.** The HTTP routes carry no session, so `activeCampaignDir` used to
+  resolve against the process-level root — on a machine with two workspaces
+  the panel kept showing the OTHER workspace's campaign while looking
+  perfectly healthy. Routes now resolve the root from the session store's
+  `list()` (the most recently opened live session's `header.cwd`); when
+  several workspaces are live the response says so, and when no session can
+  be resolved the fallback is announced in the payload instead of hidden.
+- The panel polls `GET /dnd/characters` every 10 s while open, so numbers
+  written by `dnd_*` tools appear without a manual close + reopen. The poll
+  timer is unref'd under node: the old behavior kept `verify-client` alive
+  forever, which hung `npm run check` with a zombie verify process per run.
+
+### Added
+
+- **`dnd_panel_status`** — a read-only verifier for the panel's data pipeline:
+  it reports the resolved data root, the active campaign and every character's
+  headline numbers, and flags a mismatch between the calling session's
+  workspace and the root the panel is serving. Deliberately a READ of the same
+  pipeline (no snapshot copy to drift), because "which workspace is the panel
+  showing?" is a question the panel itself cannot answer.
+- **The no-machine-paths convention is enforced**: `scripts/audit-paths.mjs`
+  runs in `npm run check` and fails on any drive-letter path committed in
+  `src/`, `cordis.patch.yml` or `README.md`. test/ and scripts/ are exempt —
+  their Windows-looking literals are synthetic fixtures remapped into temp
+  trees with leak guards.
+
+
 ### Changed
 
 - **The workspace-root global `characters/` roster is removed.** When the

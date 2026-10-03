@@ -105,18 +105,34 @@ function setOpen(next) {
   for (const listener of OPEN.listeners) listener()
 }
 
-/** Load the character list, once per open. Never throws into a render. */
+/**
+ * Load the character list on open, then poll while the panel stays open, so
+ * numbers written by dnd_* tools during play appear without a manual close +
+ * reopen. Each poll replaces the whole result — there is no merging, so a
+ * character deleted mid-session disappears instead of lingering.
+ */
+const POLL_MS = 10000
+
 function useCharacters(open) {
   const [state, setState] = React.useState({ phase: 'idle', status: 0, body: null })
   React.useEffect(() => {
     if (!open) return undefined
     let cancelled = false
+    const load = () => {
+      fetch(DND_API + '/characters', { cache: 'no-store' })
+        .then(async (res) => ({ status: res.status, body: await res.json() }))
+        .catch((error) => ({ status: 0, body: { error: String(error && error.message ? error.message : error) } }))
+        .then((result) => { if (!cancelled) setState({ phase: 'done', ...result }) })
+    }
     setState({ phase: 'loading', status: 0, body: null })
-    fetch(DND_API + '/characters', { cache: 'no-store' })
-      .then(async (res) => ({ status: res.status, body: await res.json() }))
-      .catch((error) => ({ status: 0, body: { error: String(error && error.message ? error.message : error) } }))
-      .then((result) => { if (!cancelled) setState({ phase: 'done', ...result }) })
-    return () => { cancelled = true }
+    load()
+    const timer = setInterval(load, POLL_MS)
+    // A polling timer that is alive only to keep a browser panel fresh must
+    // not keep a headless node process (verify-client renders the OPEN panel)
+    // alive forever — that hung `npm run check` at verify until processes
+    // were killed by hand.
+    if (typeof timer === 'object' && timer !== null && typeof timer.unref === 'function') timer.unref()
+    return () => { cancelled = true; clearInterval(timer) }
   }, [open])
   return state
 }

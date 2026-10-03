@@ -8,6 +8,21 @@ Every number in a character has exactly one home. The structured state lives in
 `characters/<name>.md`. Neither file duplicates the other, so they cannot drift
 apart — which is the failure this design exists to prevent.
 
+## Conventions
+
+- **No machine-specific paths in the production surface.** Every data root is
+  resolved at call time: tools use the calling session's workspace
+  (`session.header.cwd`); the HTTP routes use the most recently opened live
+  session (`SessionStore.list()`); with no session in play the fallback chain
+  is `DND_ROOT` / `DSH_CWD` env, then a legacy literal. `node
+  scripts/audit-paths.mjs` (part of `npm run check`) fails on any drive-letter
+  path committed under `src/`, `cordis.patch.yml` or this README.
+- **The panel never falls back silently.** When the routes cannot resolve a
+  session workspace, the response carries an explicit warning that the panel
+  renders — plausible data from the wrong workspace is the one failure this
+  bundle never ships.
+
+
 ## Install
 
 ```bash
