@@ -6,6 +6,23 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Added
+
+- **The panel renders a full character sheet, in Chinese.** Three gaps closed
+  at once. (1) Equipment: the panel now lists equipped weapons and armor with
+  what they DO — damage dice, weapon properties, and under the 2024 rules the
+  weapon's mastery property (the special action it grants), from a new
+  `GET /dnd/meta` display index. (2) Class features: a sheet whose Features &
+  Traits was never filled in now still shows the features the class table
+  grants at the character's level (per ruleset, from the datasets), beside the
+  sheet's own hand-written entries, which the Host now extracts from the
+  narrative and ships per character. (3) Spells: each cantrip/prepared/book
+  entry is a card with its Chinese name, ring/school, and the Host-parsed
+  combat line (dice + damage type + save, e.g. "8d6 火焰 · DEX豁免"). A new
+  `data/i18n-zh.json` (~350 spells plus abilities, skills, conditions, weapons,
+  armor, mastery and common class features) backs the Chinese labels; a term
+  the map lacks renders in English rather than breaking.
+
 ### Fixed
 
 - **`dnd_attack` parses compound damage expressions.** `damage: "1d4+3+1d6"`

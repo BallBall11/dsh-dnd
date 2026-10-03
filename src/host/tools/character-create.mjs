@@ -29,7 +29,7 @@
  * spellbook one. Anything the DM passes explicitly wins.
  */
 
-import { activeCampaignDir, readTextOrUndefined } from './shared.mjs'
+import { activeCampaignDir, readCampaignRuleset, readTextOrUndefined } from './shared.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { statePath, sheetPath, writeCharacter } from './state-io.mjs'
 import { loadDataset } from './lookup.mjs'
@@ -109,26 +109,6 @@ export function sheetTemplate() {
     '- prose the parser preserves verbatim',
     '```',
   ].join('\n')
-}
-
-/**
- * The campaign's declared ruleset, read from the active campaign's state.md
- * frontmatter ("**Ruleset**: 2024"). Defaults to 2014 — the same default the
- * SRD lookup uses — when the file is absent, unreadable, or silent on the
- * point. The value is echoed into the tool's reply either way, so a campaign
- * whose marker cannot be read still shows the DM which rules the card was
- * built under instead of hiding the choice.
- * @param fs - the host fs service.
- * @param dir - the campaign directory.
- * @returns "2014" or "2024".
- */
-async function campaignRuleset(fs, dir) {
-  try {
-    const text = await fs.readText(await fs.resolve(`${dir}/state.md`))
-    const match = String(text).match(/^\s*[-*]?\s*\**\s*Ruleset:?\**\s*:?\s*(2014|2024)\b/im)
-    if (match !== null) return match[1]
-  } catch { /* fall through to the default */ }
-  return '2014'
 }
 
 /**
@@ -239,7 +219,7 @@ export function buildTools(ctx) {
 
       const level = Number(args.level) > 0 ? Math.min(20, Math.floor(Number(args.level))) : 1
       const prof = proficiencyBonus(level)
-      const ruleset = await campaignRuleset(fs, located.dir)
+      const ruleset = await readCampaignRuleset(fs, located.dir)
       const skeleton = await classSkeleton(fs, args.klass, ruleset)
       if (skeleton.skeletonError !== undefined) {
         return 'dnd_character_create could not read the class dataset: ' + skeleton.skeletonError

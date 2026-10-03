@@ -73,12 +73,31 @@ const CSS = `
 .dnd-party>*{padding:0 9px;min-width:0;overflow-wrap:anywhere}
 .dnd-party>*+*{border-left:1px solid var(--dsw-alias-border-l1)}
 .dnd-party>*:nth-child(4n+1){border-left:none;padding-left:0}
-.dnd-spells .dnd-tag{overflow-wrap:anywhere}
-.dnd-spells{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0;padding:4px 0}
 .dnd-tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;
   background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);
   border:1px solid var(--dsw-alias-border-l1)}
 .dnd-label{font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:6px}
+.dnd-sec{font-size:12px;font-weight:600;margin:8px 0 2px;color:var(--dsw-alias-label-primary)}
+.dnd-spellcard{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:5px 8px;margin:4px 0;background:var(--dsw-alias-bg-layer-2)}
+.dnd-spellcard b{font-size:12px}
+.dnd-spellcard .en{color:var(--dsw-alias-label-secondary);font-size:10px;margin-left:4px}
+.dnd-spellcard .meta{color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:2px}
+.dnd-spellcard .meta em{font-style:normal;color:var(--dsw-alias-state-warn-primary)}
+.dnd-eq{display:flex;justify-content:space-between;gap:6px;padding:3px 0;border-bottom:1px dashed var(--dsw-alias-border-l1);align-items:baseline}
+.dnd-eq:last-child{border-bottom:none}
+.dnd-eq .en{color:var(--dsw-alias-label-secondary);font-size:10px}
+.dnd-eq .meta{color:var(--dsw-alias-label-secondary);font-size:11px;white-space:nowrap}
+.dnd-chip{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;margin:2px 2px 0 0;
+  background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}
+.dnd-chip.mastery{color:var(--dsw-alias-state-warn-primary);border-color:var(--dsw-alias-state-warn-primary)}
+.dnd-feat{padding:3px 0;border-bottom:1px dashed var(--dsw-alias-border-l1)}
+.dnd-feat:last-child{border-bottom:none}
+.dnd-feat b{font-size:12px}
+.dnd-feat .en{color:var(--dsw-alias-label-secondary);font-size:10px;margin-left:4px}
+.dnd-feat p{margin:1px 0 0;font-size:11px;color:var(--dsw-alias-label-secondary)}
+.dnd-levelchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.dnd-levelchip{border-radius:6px;padding:2px 7px;font-size:11px;background:var(--dsw-alias-bg-layer-2);
+  border:1px solid var(--dsw-alias-border-l1)}
 `
 
 /** Inject the stylesheet once, keyed so a reload does not stack duplicates. */
@@ -143,6 +162,41 @@ function useCharacters(open) {
   return state
 }
 
+/**
+ * The display index behind the panel's Chinese labels and spell/weapon info:
+ * fetched ONCE per page (the payload derives from the bundle's own datasets,
+ * not from campaign state, so polling it would be waste), kept in a module
+ * promise and shared by every render.
+ */
+let metaPromise = null
+function loadMeta() {
+  if (metaPromise === null) {
+    metaPromise = fetch(DND_API + '/meta', { cache: 'no-store' })
+      .then(async (res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+  }
+  return metaPromise
+}
+
+function useMeta() {
+  const [meta, setMeta] = React.useState(null)
+  React.useEffect(() => {
+    let cancelled = false
+    loadMeta().then((data) => { if (!cancelled) setMeta(data) })
+    return () => { cancelled = true }
+  }, [])
+  return meta
+}
+
+/** zh term for an EN key, falling back to the key itself. */
+function zh(meta, map, key) {
+  if (meta !== null && meta !== undefined && key !== null && key !== undefined) {
+    const hit = (meta[map] ?? {})[key]
+    if (typeof hit === 'string' && hit !== '') return hit
+  }
+  return key
+}
+
 /** The modifier shown beside an ability score. */
 function modifier(score) {
   if (typeof score !== 'number') return '—'
@@ -160,11 +214,11 @@ function hpBand(current, max) {
   return ''
 }
 
-function AbilityGrid({ state }) {
+function AbilityGrid({ state, meta }) {
   const keys = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
   return React.createElement('div', { className: 'dnd-grid' },
     ...keys.map((k) => React.createElement('div', { key: k, className: 'dnd-cell' },
-      React.createElement('span', null, k),
+      React.createElement('span', { title: k }, zh(meta, 'abilities', k)),
       React.createElement('b', null, state.abilities[k] ?? '—'),
       React.createElement('span', null, modifier(state.abilities[k])))))
 }
@@ -209,14 +263,34 @@ function Findings({ findings }) {
 }
 
 /**
- * The castable spell surface: cantrips, prepared spells and the spellbook.
- * The Host already splits `spells` into the three lists, so the panel only
- * decides how to present them — it must not re-derive what is "castable",
- * otherwise the panel and the sheet grow two opinions. There is no attacks
- * list: the sheet parser's weapon rows were neither complete (no unarmed,
- * no spell attacks) nor actionable, so the state model dropped them.
+ * One spell with its combat line: the Chinese name (English beside it when
+ * they differ), ring/school and the Host-parsed damage/save line. The panel
+ * renders what /dnd/meta sends and never re-parses the SRD itself.
  */
-function ActionList({ st }) {
+function SpellCard({ name, meta }) {
+  const entry = meta !== null && meta !== undefined ? (meta.spells ?? {})[name] : undefined
+  const displayName = entry !== undefined && entry.zh !== null && entry.zh !== undefined ? entry.zh : name
+  const metaBits = []
+  if (entry !== undefined && entry.level !== null && entry.level !== undefined) metaBits.push(entry.level + '环')
+  if (entry !== undefined && entry.school) metaBits.push(entry.school)
+  return React.createElement('div', { className: 'dnd-spellcard' },
+    React.createElement('div', null,
+      React.createElement('b', null, displayName),
+      displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
+    (metaBits.length > 0 || (entry !== undefined && entry.info))
+      ? React.createElement('div', { className: 'meta' },
+        metaBits.join(' · '),
+        entry !== undefined && entry.info
+          ? React.createElement('em', null, (metaBits.length > 0 ? ' | ' : '') + entry.info)
+          : null)
+      : null)
+}
+
+/**
+ * The castable spell surface: cantrips, prepared spells and the spellbook,
+ * each entry a card with damage/save info.
+ */
+function SpellList({ st, meta }) {
   const spells = st.spells ?? {}
   const lists = [
     ['戏法', Array.isArray(spells.cantrips) ? spells.cantrips : []],
@@ -225,15 +299,100 @@ function ActionList({ st }) {
   ]
   if (!lists.some(([, items]) => items.length > 0)) return null
   return React.createElement('div', null,
-    React.createElement('div', { className: 'dnd-muted' }, '戏法 / 法术'),
+    React.createElement('div', { className: 'dnd-sec' }, '法术'),
     ...lists.flatMap(([label, items]) => items.length === 0 ? [] : [
       React.createElement('div', { key: label + '-label', className: 'dnd-label' }, label),
-      React.createElement('div', { key: label + '-items', className: 'dnd-spells' },
-        ...items.map((name, i) => React.createElement('span', { key: i, className: 'dnd-tag' }, name))),
+      ...items.map((name, i) => React.createElement(SpellCard, { key: label + i, name, meta })),
     ]))
 }
 
-function Character({ character }) {
+/**
+ * Equipped weapons and armor with what they DO: the weapon's damage dice, its
+ * properties (灵巧/轻型/…) and — under the 2024 rules — the mastery property
+ * the weapon grants, which IS a special action in play. Data comes from
+ * /dnd/meta's weapons/armor index; a weapon the datasets do not know renders
+ * by name alone instead of disappearing.
+ */
+function Equipment({ st, meta }) {
+  const equipment = st.equipment ?? {}
+  const weaponNames = Object.keys(equipment.weapons ?? {})
+  const armorNames = Object.keys(equipment.armour ?? {})
+  const gearNames = Object.keys(equipment.gear ?? {})
+  if (weaponNames.length === 0 && armorNames.length === 0 && gearNames.length === 0) return null
+  const weaponMeta = (name) => meta !== null && meta !== undefined ? (meta.weapons ?? {})[name] : undefined
+  const armorMeta = (name) => meta !== null && meta !== undefined ? (meta.armor ?? {})[name] : undefined
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'dnd-sec' }, '装备'),
+    ...weaponNames.map((name) => {
+      const w = weaponMeta(name)
+      const displayName = w !== undefined && w.zh ? w.zh : name
+      return React.createElement('div', { key: 'w' + name, className: 'dnd-eq' },
+        React.createElement('span', null,
+          React.createElement('b', null, displayName),
+          displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
+        React.createElement('span', { className: 'meta' },
+          w !== undefined && w.damage ? w.damage : '—'))
+    }),
+    ...armorNames.map((name) => {
+      const a = armorMeta(name)
+      const displayName = a !== undefined && a.zh ? a.zh : name
+      return React.createElement('div', { key: 'a' + name, className: 'dnd-eq' },
+        React.createElement('span', null,
+          React.createElement('b', null, displayName),
+          displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
+        React.createElement('span', { className: 'meta' }, a !== undefined && a.ac ? a.ac : ''))
+    }),
+    ...weaponNames.flatMap((name) => {
+      const w = weaponMeta(name)
+      if (w === undefined || (w.properties.length === 0 && !w.mastery)) return []
+      const bits = w.properties.map((p) => React.createElement('span', { key: p, className: 'dnd-chip' }, zh(meta, 'weaponProperties', p)))
+      if (w.mastery) {
+        bits.push(React.createElement('span', { key: 'mastery', className: 'dnd-chip mastery', title: '武器精通（2024）' },
+          '精通·' + zh(meta, 'mastery', w.mastery)))
+      }
+      return [React.createElement('div', { key: 'p' + name, className: 'dnd-levelchips' }, ...bits)]
+    }),
+    gearNames.length > 0
+      ? React.createElement('div', { className: 'dnd-levelchips' },
+        ...gearNames.map((g) => React.createElement('span', { key: g, className: 'dnd-chip' }, g)))
+      : null)
+}
+
+/**
+ * Class features, from two sources the Host already owns:
+ *   - the class table at the character's level (/dnd/meta classes[ruleset]) —
+ *     the features the rules say the character HAS, even on a lazy sheet;
+ *   - the sheet's own Features & Traits entries (character.features), the
+ *     hand-written list the DM maintains.
+ */
+function Features({ character, st, meta, ruleset }) {
+  const sheetFeatures = Array.isArray(character.features) ? character.features : []
+  const identity = st.identity ?? {}
+  const className = identity.class
+  const level = identity.level
+  let tableFeatures = []
+  if (meta !== null && meta !== undefined && className !== null && className !== undefined
+    && level !== null && level !== undefined) {
+    const byLevel = ((meta.classes ?? {})[ruleset] ?? {})[String(className)] ?? null
+    if (Array.isArray(byLevel)) {
+      for (let lv = 1; lv <= Math.min(level, byLevel.length); lv += 1) {
+        tableFeatures = tableFeatures.concat(Array.isArray(byLevel[lv - 1]) ? byLevel[lv - 1] : [])
+      }
+    }
+  }
+  if (tableFeatures.length === 0 && sheetFeatures.length === 0) return null
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'dnd-sec' }, '特性与动作'),
+    tableFeatures.length > 0
+      ? React.createElement('div', { className: 'dnd-levelchips' },
+        ...tableFeatures.map((f, i) => React.createElement('span', { key: i, className: 'dnd-levelchip' }, zh(meta, 'features', f))))
+      : null,
+    ...sheetFeatures.map((f, i) => React.createElement('div', { key: 's' + i, className: 'dnd-feat' },
+      React.createElement('b', null, zh(meta, 'features', f.name)),
+      f.text !== '' ? React.createElement('p', null, f.text) : null)))
+}
+
+function Character({ character, meta, ruleset }) {
   const st = character.state
   if (st === null || st === undefined) {
     return React.createElement('div', { className: 'dnd-err' },
@@ -257,12 +416,12 @@ function Character({ character }) {
         ? React.createElement('span', { className: 'dnd-tag', title: '尚未拆分出 .state.json' }, '未迁移')
         : null),
     React.createElement(HitPoints, { combat }),
-    React.createElement(AbilityGrid, { state: st }),
+    React.createElement(AbilityGrid, { state: st, meta }),
     React.createElement('div', { className: 'dnd-sep' }),
     React.createElement('div', { className: 'dnd-row' },
-      React.createElement('span', null, 'AC'),
+      React.createElement('span', null, '护甲 AC'),
       React.createElement('span', null,
-        (combat.ac ?? '—') + (combat.mageArmorAc ? '（Mage Armor ' + combat.mageArmorAc + '）' : ''))),
+        (combat.ac ?? '—') + (combat.mageArmorAc ? '（法师护甲 ' + combat.mageArmorAc + '）' : ''))),
     React.createElement('div', { className: 'dnd-row' },
       React.createElement('span', null, '先攻 / 速度'),
       // initiative arrives as a FINAL modifier (sheet-parse reads the sheet's
@@ -274,10 +433,12 @@ function Character({ character }) {
         (typeof combat.initiative === 'number'
           ? (combat.initiative >= 0 ? '+' : '') + combat.initiative
           : '—')
-        + ' / ' + (combat.speed ?? '—') + ' ft')),
+        + ' / ' + (combat.speed ?? '—') + ' 尺')),
     st.spellcasting.saveDC !== null && st.spellcasting.saveDC !== undefined
       ? React.createElement('div', { className: 'dnd-row' },
-        React.createElement('span', null, '法术 DC / 攻击'),
+        React.createElement('span', null,
+          '法术 DC / 攻击'
+          + (st.spellcasting.ability ? '（' + zh(meta, 'abilities', st.spellcasting.ability) + '）' : '')),
         React.createElement('span', null,
           st.spellcasting.saveDC + ' / ' + (st.spellcasting.attackBonus >= 0 ? '+' : '') + st.spellcasting.attackBonus))
       : null,
@@ -294,14 +455,16 @@ function Character({ character }) {
         // which also meant .dnd-pro never styled anything. Every other list in
         // this file spreads its children; this was the one place that did not.
         '熟练：',
-        ...proficiency.map((p) => React.createElement('span', { key: p, className: 'dnd-pro' }, p + ' ')))
+        ...proficiency.map((p) => React.createElement('span', { key: p, className: 'dnd-pro' }, zh(meta, 'skills', p) + ' ')))
       : null,
-    React.createElement(ActionList, { st }),
+    React.createElement(Equipment, { st, meta }),
+    React.createElement(Features, { character, st, meta, ruleset }),
+    React.createElement(SpellList, { st, meta }),
     React.createElement(Findings, { findings: character.findings }))
 }
 
 /** Render the transport result; every branch is an outcome a DM might hit. */
-function Body({ result }) {
+function Body({ result, meta }) {
   if (result.phase === 'loading') return React.createElement('div', { className: 'dnd-muted' }, '读取中…')
   if (result.phase !== 'done') return null
 
@@ -326,7 +489,7 @@ function Body({ result }) {
   return React.createElement('div', null,
     React.createElement('div', { className: 'dnd-party' },
       ...characters.map((c) => React.createElement('div', { key: c.name },
-        React.createElement(Character, { character: c })))),
+        React.createElement(Character, { character: c, meta: result.meta, ruleset: result.body.ruleset ?? '2014' })))),
     ...warnings.map((w, i) => React.createElement('div', { key: 'gw' + i, className: 'dnd-warn' }, w)))
 }
 
@@ -345,6 +508,7 @@ function Action(props) {
 function Overlay() {
   const open = useOpen()
   const result = useCharacters(open)
+  const meta = useMeta()
   if (!open) return null
   const campaign = result.body && result.body.campaign ? result.body.campaign : null
   return React.createElement('div', {
@@ -354,7 +518,7 @@ function Overlay() {
   React.createElement('div', { className: 'dnd-head' },
     React.createElement('div', { className: 'dnd-name' }, '角色'),
     campaign !== null ? React.createElement('span', { className: 'dnd-tag' }, campaign) : null),
-  React.createElement(Body, { result }))
+  React.createElement(Body, { result, meta }))
 }
 
 const PANELS = [

@@ -127,6 +127,11 @@ const SHEET = `# Alice
 
 ## Backstory & Notes
 - 游历世界收集法术的精灵法师贤者。
+
+## Features & Traits
+
+**Ritual Casting** — 可以以仪式形式施放具有仪式标记的法术。
+**Fey Ancestry (精灵血脉)** — 对魅惑效果的豁免检定具有优势。
 `
 writeFileSync(nodePath(`${campaignsDir}/alpha/characters/alice.md`), SHEET, 'utf8')
 
@@ -222,6 +227,40 @@ await test('the response carries display projections', async () => {
   assert.equal(alice.display.currency, '8 gp 0 sp 0 cp',
     'money is formatted on the host so the panel cannot drift')
   assert.equal(alice.display.class, 'Wizard')
+})
+
+await test('the response carries the campaign ruleset and sheet features', async () => {
+  // The panel needs the ruleset to pick the right per-class feature table,
+  // and the Features & Traits list lives in narrative the state file does not
+  // carry — the Host extracts it so the client never parses sheet markdown.
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  assert.match(body.ruleset, /^(2014|2024)$/, JSON.stringify(body.ruleset))
+  const alice = body.characters.find((c) => c.name === 'alice')
+  assert.ok(Array.isArray(alice.features), 'features must be an array')
+  assert.equal(alice.features.length, 2, JSON.stringify(alice.features))
+  assert.equal(alice.features[0].name, 'Ritual Casting')
+  assert.match(alice.features[0].text, /仪式/)
+  assert.equal(alice.features[1].name, 'Fey Ancestry (精灵血脉)')
+})
+
+await test('GET /dnd/meta serves the display index the panel renders against', async () => {
+  const res = await fetch(`${srv.url}${API_PREFIX}/meta`)
+  assert.equal(res.status, 200)
+  const meta = await res.json()
+  // Chinese names for spells...
+  assert.equal(meta.spells['Fireball'].zh, '火球术')
+  // ...their combat line parsed from the SRD prose...
+  assert.equal(meta.spells['Fireball'].level, 3)
+  assert.match(meta.spells['Fireball'].info, /8d6/)
+  assert.match(meta.spells['Fireball'].info, /DEX豁免/)
+  // ...per-class features by level...
+  assert.deepEqual(meta.classes['2024']?.['Wizard']?.[0], ['Arcane Recovery', 'Ritual Adept', 'Spellcasting'])
+  // ...and weapons with their damage and 2024 mastery action.
+  assert.equal(meta.weapons['Longsword'].zh, '长剑')
+  assert.equal(meta.weapons['Longsword'].damage, '1d8 Slashing')
+  assert.equal(meta.weapons['Longsword'].mastery, 'Sap')
+  assert.equal(meta.armor['Chain Mail'].zh, '锁甲')
+  assert.equal(meta.i18n.abilities.STR, '力量')
 })
 
 await test('an unmigrated character reports needsMigration', async () => {
