@@ -384,12 +384,24 @@ await test('dnd_srd_lookup reads the dataset the PACKAGE ships', async () => {
   // code root, which the user deleted on purpose. The tool then answered
   // "dataset not found" for data that was merely somewhere else. Asserting a
   // real ENTRY proves the dataset was found AND parsed — a path fix that
-  // forgot to ship the files would still fail here. Single ruleset by
-  // decision: 2014 only.
+  // forgot to ship the files would still fail here.
   const out = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster' })
   assert.match(out, /\[ruleset 2014\]/, out)
   assert.match(out, /goblin/i, out)
   assert.ok(!/dataset missing/i.test(out), out)
+})
+
+await test('dnd_srd_lookup searches the 2024 dataset', async () => {
+  const out = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster', ruleset: '2024' })
+  assert.match(out, /\[ruleset 2024\]/, out)
+  assert.match(out, /goblin/i, out)
+  assert.ok(!/dataset missing/i.test(out), out)
+})
+
+await test('dnd_srd_lookup rejects an unknown ruleset before searching', async () => {
+  const out = await call('dnd_srd_lookup', { query: 'goblin', ruleset: '3.5' })
+  assert.match(out, /Unknown ruleset "3\.5"/, out)
+  assert.match(out, /Nothing was searched/, out)
 })
 
 await test('a missing dataset is distinguishable from a missing entry', async () => {

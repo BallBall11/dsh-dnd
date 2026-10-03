@@ -21,10 +21,12 @@ original content; each file records its own upstream in `_meta`.
 | `srd-2014-fulltext.json` | 2014 (SRD 5.1, full text) | [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) (`5esrd.json`, complete copy) | OGL 1.0a |
 | `supplemental.json` | — | hand-curated additions to the structured datasets | OGL 1.0a |
 
-What `dnd_srd_lookup` reads: `class` queries (and bare class names) are answered
-from `srd-2014-fulltext.json`; every other category is answered from
-`srd-2014.json` merged with `supplemental.json`, curated entries labelled
-`(category · curated)`. `srd-2024.json` is currently dormant — nothing loads it.
+What `dnd_srd_lookup` reads: with `ruleset: "2014"` (the default), `class`
+queries and bare class names are answered from `srd-2014-fulltext.json` and
+every other category from `srd-2014.json` merged with `supplemental.json`
+(curated entries labelled `(category · curated)`); with `ruleset: "2024"`,
+queries are answered from `srd-2024.json` as-is, including its structured
+`classes` array.
 
 The underlying game text is Wizards of the Coast material, released through
 the OGL 1.0a (SRD 5.1) and CC-BY-4.0 (SRD 5.2). Dungeons & Dragons, D&D and

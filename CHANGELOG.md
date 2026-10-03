@@ -12,8 +12,10 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   `dnd5e_srd.json` → `srd-2014.json`, `dnd5e_srd_2024.json` →
   `srd-2024.json`, `dnd5e_srd_full.json` → `srd-2014-fulltext.json`,
   `dnd5e_supplemental.json` → `supplemental.json` — the old names left it
-  unclear which file belonged to which ruleset. `dnd_srd_lookup` is pinned to
-  2014; `srd-2024.json` ships but nothing loads it. The wiring is now
+  unclear which file belonged to which ruleset. `dnd_srd_lookup` takes a
+  `ruleset` argument again ("2014" default, "2024" supported): 2014 keeps its
+  full-text class route and supplemental merge; 2024 is searched as-is from
+  `srd-2024.json`, including its structured `classes` array. The wiring is
   documented in code and README, and a gap it exposed was closed:
   `supplemental.json` was never actually read by any tool. It is now merged
   into the lookup's scored scan, with curated entries labelled
