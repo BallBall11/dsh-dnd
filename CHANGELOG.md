@@ -6,6 +6,16 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The workspace-root global `characters/` roster is removed.** When the
+  active campaign had no `characters/` directory, `dnd_character_get` used to
+  fall back to reading sheets from `<workspace>/characters/` — a character
+  with two possible homes is a drift vector, and a campaign is the scope of
+  its own party. Every character now lives only in
+  `campaigns/<campaign>/characters/`; an empty directory is a true empty
+  party, and `dnd_character_create` has been the only writer since it landed.
+
 ### Fixed
 
 - **`dnd_character_create` no longer accepts an `abilities` object it cannot
