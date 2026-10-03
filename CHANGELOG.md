@@ -27,6 +27,22 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   Spell lists get clearer item separation: chips gain a hairline border and
   wider gaps.
 
+### Added
+
+- **The complete 2014 SRD ships with the bundle** (`data/dnd5e_srd_full.json`,
+  from https://github.com/BTMorton/dnd-5e-srd, OGL/CC-BY-4.0), and
+  `dnd_srd_lookup` gains a `class` category over it: `query=bard
+  category=class` returns the whole class document — hit points,
+  proficiencies, starting equipment, the 20-level table (proficiency bonus,
+  features, spells known, per-level spell slots) and every feature in prose.
+  A bare class-name query under ruleset 2014 routes to the class document
+  first, so "fighter" finds the class rather than feature fragments. The
+  structured per-class skeleton (`classes` in `dnd5e_srd.json` — hit die,
+  saves, spellcasting ability and the level table) feeds
+  `dnd_character_create`, which now picks the skeleton matching the
+  campaign's ruleset and AUTO-FILLS spell slots from the class table when the
+  caller passes none.
+
 ### Fixed
 
 - **The panel now serves the live session workspace, not the process

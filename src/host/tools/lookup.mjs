@@ -18,6 +18,16 @@ const DATASETS = {
   2024: `${DATA_ROOT}/dnd5e_srd_2024.json`,
 }
 
+// The FULL 2014 SRD (https://github.com/BTMorton/dnd-5e-srd), carried as a
+// complete copy: per-class sections with hit points, proficiencies, starting
+// equipment, the 20-level class table and every feature in prose. Its shape
+// is section objects rather than the array-of-entries shape of DATASETS, so
+// only the `class` category reads it.
+const FULL_DATASET_2014 = `${DATA_ROOT}/dnd5e_srd_full.json`
+// The upstream files use LF; the renderers below need newlines without
+// depending on this file's own line-ending convention.
+const NL = String.fromCharCode(10)
+
 /** Caller-facing category -> dataset array key. */
 const CATEGORY_KEYS = {
   spell: 'spells',
@@ -96,12 +106,94 @@ export async function loadDataset(fs, ruleset) {
   }
 }
 
+
+// Load the full 2014 dataset. Missing-file errors reuse loadDataset's
+// operator-facing wording by proxying through its message builder.
+async function loadFull2014(fs) {
+  const target = await fs.resolve(FULL_DATASET_2014)
+  if ((await fs.stat(target)) === undefined) return { error: missingDatasetMessage(FULL_DATASET_2014, '2014-full') }
+  try {
+    return { data: JSON.parse(await fs.readText(target)) }
+  } catch (error) {
+    return { error: `Failed to parse ${FULL_DATASET_2014}: ${error && error.message ? error.message : error}` }
+  }
+}
+
+const CLASS_NAME_KEYS = new Set(['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'])
+
+// Case-insensitive class-name match against the full dataset's sections.
+async function matchClassName(fs, query) {
+  const loaded = await loadFull2014(fs)
+  if (loaded.error !== undefined) return undefined
+  const wanted = query.trim().toLowerCase()
+  const hit = Object.keys(loaded.data).find((k) => CLASS_NAME_KEYS.has(k.toLowerCase()) && k.toLowerCase().includes(wanted))
+  return hit
+}
+
+// Flatten the upstream content shape: a string, or a nested array of lines.
+function flattenContent(content, out) {
+  const acc = out ?? []
+  if (typeof content === 'string') acc.push(content)
+  else if (Array.isArray(content)) for (const item of content) flattenContent(item, acc)
+  return acc
+}
+
+// Render ONE class section from the full 2014 SRD as a readable digest.
+function renderClassSection(name, section) {
+  const cf = section?.['Class Features']
+  if (cf === undefined || cf === null) return `#${name}` + NL + '(no Class Features section found)'
+  const cap = (text, n) => (text.length > n ? text.slice(0, n) + ' ...' : text)
+  const lines = [`# ${name} (2014 SRD, full class reference)`]
+
+  for (const [key, value] of Object.entries(cf)) {
+    if (key === 'content' || value === null || value === undefined) continue
+    if (value !== null && typeof value === 'object' && value.table !== undefined) {
+      lines.push('', `## ${key}`)
+      const t = value.table
+      const cols = Object.keys(t)
+      for (let i = 0; i < (t.Level?.length ?? 0); i += 1) {
+        const parts = []
+        const prof = t['Proficiency Bonus']?.[i] ?? t['Proficieny Bonus']?.[i]
+        if (prof !== undefined) parts.push('prof ' + String(prof).trim())
+        const feats = String(t.Features?.[i] ?? '').trim()
+        if (feats !== '' && feats !== '-') parts.push(feats)
+        for (const c of cols) {
+          if (c === 'Level' || c === 'Features' || c === 'Proficiency Bonus' || c === 'Proficieny Bonus') continue
+          const v = String(t[c][i] ?? '').trim()
+          if (v !== '' && v !== '-') parts.push(`${c} ${v}`)
+        }
+        lines.push(`- Lv${i + 1}: ` + parts.join(' | '))
+      }
+      continue
+    }
+    const body = flattenContent(typeof value === 'string' ? value : value.content)
+      .map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
+    if (body.length === 0) continue
+    lines.push('', `## ${key}`, ...body.map((l) => '- ' + cap(l, 500)))
+  }
+  return lines.join(NL)
+}
+
+// The `class` category entry point: match, render, cap.
+async function classReference(fs, query, max) {
+  const loaded = await loadFull2014(fs)
+  if (loaded.error !== undefined) return loaded.error
+  const wanted = query.trim().toLowerCase()
+  const names = Object.keys(loaded.data).filter((k) => CLASS_NAME_KEYS.has(k.toLowerCase()))
+  const hits = names.filter((k) => k.toLowerCase().includes(wanted))
+  if (hits.length === 0) {
+    return `[no match] No class matches "${query}" (2014 full reference). Known: ${names.join(',')}.`
+  }
+  const top = hits.slice(0, Math.max(1, Math.min(max, 3)))
+  const SEP = NL + NL + '=====' + NL + NL
+  return top.map((name) => renderClassSection(name, loaded.data[name])).join(SEP)
+}
 /**
  * Detect the active campaign's ruleset from its state.md header.
  * @param fs - the host fs service.
  * @returns "2014" or "2024"; legacy campaigns default to "2014".
  */
-async function detectRuleset(fs, session) {
+export async function detectRuleset(fs, session) {
   const campaign = await readActiveCampaign(fs, session)
   if (campaign === undefined) return '2014'
   const text = await readTextOrUndefined(fs, `${dndRoot(session)}/campaigns/${campaign}/state.md`)
@@ -159,7 +251,7 @@ export function buildTools(ctx) {
         category: {
           type: 'string',
           description: 'Optional category filter. Omit to search every category.',
-          enum: ['spell', 'monster', 'item', 'equipment', 'condition', 'magic-item', 'class-feature', 'weapon', 'armor'],
+          enum: ['spell', 'monster', 'item', 'equipment', 'condition', 'magic-item', 'class-feature', 'class', 'weapon', 'armor'],
         },
         ruleset: { type: 'string', description: 'Override the dataset: "2014" or "2024". Defaults to the active campaign\'s ruleset.', enum: ['2014', '2024'] },
         max: { type: 'integer', description: 'Maximum matches to return (default 5).' },
@@ -192,6 +284,11 @@ export function buildTools(ctx) {
       const wantedKey = args.category !== undefined ? CATEGORY_KEYS[String(args.category).toLowerCase()] : undefined
       if (args.category !== undefined && wantedKey === undefined) {
         return `Unknown category "${args.category}". Known: ${Object.keys(CATEGORY_KEYS).join(', ')}.`
+      }
+      if (wantedKey === 'classes') return await classReference(fs, String(args.query), max)
+      if (wantedKey === undefined && ruleset === '2014') {
+        const className = await matchClassName(fs, String(args.query))
+        if (className !== undefined) return await classReference(fs, className, max)
       }
       const keys = wantedKey !== undefined
         ? [wantedKey]
