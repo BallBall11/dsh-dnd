@@ -17,6 +17,9 @@
  *   - `features`     ← Features.json: replaces the previously stale (2014
  *                      worded) per-class feature descriptions with the 2024
  *                      text, now including each feature's level.
+ *   - species/subspecies traits ← Traits.json: fills in the full 2024
+ *                      description for every species and subspecies trait
+ *                      (they previously carried only name/index stubs).
  *
  * Everything else in the dataset (spells, equipment, monsters, ...) is left
  * untouched. The merge is idempotent: re-running with a fresher upstream
@@ -32,7 +35,7 @@ import { fileURLToPath } from 'node:url'
 const DATA = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'srd-2024.json')
 const DIR = process.argv[2]
 const BASE = 'https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2024/en'
-const FILES = ['Classes', 'Levels', 'Features', 'Subclasses']
+const FILES = ['Classes', 'Levels', 'Features', 'Subclasses', 'Traits']
 
 async function load(name) {
   const local = DIR !== undefined ? path.join(DIR, `5e-SRD-${name}.json`) : undefined
@@ -47,7 +50,7 @@ async function load(name) {
 const ABILITY_CODES = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' }
 const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null)
 
-const [classesRaw, levelsRaw, featuresRaw, subclassesRaw] = await Promise.all(FILES.map(load))
+const [classesRaw, levelsRaw, featuresRaw, subclassesRaw, traitsRaw] = await Promise.all(FILES.map(load))
 
 const classes = classesRaw.map((c) => {
   const levels = levelsRaw
@@ -121,6 +124,26 @@ const features = featuresRaw.map((f) => ({
 }))
 
 const target = JSON.parse(readFileSync(DATA, 'utf8'))
+// Species and subspecies traits previously carried only name/index stubs;
+// Traits.json holds the full 2024 text for every one of them. Join by index
+// and fail loudly if any stub has no upstream match — a silently dropped
+// description would look like a complete entry.
+{
+  const byIndex = new Map(traitsRaw.map((t) => [t.index, t.description ?? null]))
+  let filled = 0
+  const missing = []
+  for (const group of [target.species, target.subspecies]) {
+    for (const entry of group) {
+      for (const trait of entry.traits ?? []) {
+        if (!byIndex.has(trait.index)) { missing.push(`${entry.name}/${trait.index}`); continue }
+        trait.description = byIndex.get(trait.index)
+        filled += 1
+      }
+    }
+  }
+  if (missing.length > 0) throw new Error(`traits without upstream text: ${missing.join(', ')}`)
+  console.log(`trait descriptions filled: ${filled}`)
+}
 target.classes = classes
 target.features = features
 target._meta.record_counts.classes = classes.length

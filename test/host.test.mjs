@@ -398,6 +398,17 @@ await test('dnd_srd_lookup searches the 2024 dataset', async () => {
   assert.ok(!/dataset missing/i.test(out), out)
 })
 
+await test('dnd_srd_lookup renders the 2024 class table', async () => {
+  // The 2024 classes have no prose (the upstream carries none), so a class
+  // query used to return an entry with an EMPTY body. It must instead render
+  // the structured facts: hit die, spellcasting and the 20-level table.
+  const out = await call('dnd_srd_lookup', { query: 'bard', category: 'class', ruleset: '2024' })
+  assert.match(out, /# Bard \(2024 SRD\)/, out)
+  assert.match(out, /hit die d8/, out)
+  assert.match(out, /## Level table/, out)
+  assert.match(out, /Lv20:/, out)
+})
+
 await test('dnd_srd_lookup rejects an unknown ruleset before searching', async () => {
   const out = await call('dnd_srd_lookup', { query: 'goblin', ruleset: '3.5' })
   assert.match(out, /Unknown ruleset "3\.5"/, out)

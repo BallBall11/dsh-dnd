@@ -8,6 +8,21 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Changed
 
+- **2024 dataset gaps closed where the upstream allows.** An audit of
+  `srd-2024.json` against its source (5e-bits `src/2024/en`, SRD 5.2,
+  CC-BY-4.0) found: species/subspecies traits carried only name stubs with no
+  text — `refresh-2024-srd.mjs` now joins `Traits.json` by index and fills all
+  82 descriptions, failing loudly if any stub has no upstream match. And a
+  2024 `class` lookup used to return an empty body (the upstream carries no
+  class prose): the lookup now renders the structured class card instead —
+  hit die, saves, training, spellcasting block, subclasses and the full
+  20-level table. Remaining gaps are upstream limits, not omissions here:
+  class prose, background prose and monster lore text simply do not exist in
+  the 5e-bits 2024 source; backgrounds number 4 and feats 17 because that is
+  the full set the SRD 5.2 covers.
+
+### Changed
+
 - **Data files renamed and the lookup's data flow made explicit.**
   `dnd5e_srd.json` → `srd-2014.json`, `dnd5e_srd_2024.json` →
   `srd-2024.json`, `dnd5e_srd_full.json` → `srd-2014-fulltext.json`,

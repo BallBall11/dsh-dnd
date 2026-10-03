@@ -211,6 +211,57 @@ async function classReference(fs, query, max) {
   const SEP = NL + NL + '=====' + NL + NL
   return top.map((name) => renderClassSection(name, loaded.data[name])).join(SEP)
 }
+
+// Render one structured 2024 class as a readable digest. The 2024 dataset
+// has no class prose (the upstream carries none), but it does carry the
+// build-defining facts: hit die, saves, spellcasting block, subclass list
+// and the full 20-level table.
+function renderClass2024(c) {
+  const lines = [`# ${c.name} (2024 SRD)`]
+  const facts = []
+  if (c.hitDie) facts.push(`hit die ${c.hitDie}`)
+  if (c.primaryAbility) facts.push(`primary ability: ${c.primaryAbility}`)
+  if (Array.isArray(c.saves) && c.saves.length > 0) facts.push(`save profs: ${c.saves.join(', ')}`)
+  if (c.armorTraining) facts.push(`armor: ${c.armorTraining}`)
+  if (c.weaponTraining) facts.push(`weapons: ${c.weaponTraining}`)
+  if (c.otherTraining) facts.push(`other: ${c.otherTraining}`)
+  if (c.skillChoices) facts.push(`skills: ${c.skillChoices}`)
+  if (facts.length > 0) lines.push('', ...facts.map((f) => `- ${f}`))
+  if (c.spellcasting !== null && c.spellcasting !== undefined) {
+    const sc = c.spellcasting
+    lines.push('', `## Spellcasting`, `- ability ${sc.ability ?? '?'}, ${sc.mechanic ?? 'unknown'} caster, from level ${sc.level ?? '?'}`)
+    for (const note of sc.notes ?? []) lines.push(`- ${note.name}: ${note.text}`)
+  }
+  if (Array.isArray(c.subclasses) && c.subclasses.length > 0) {
+    lines.push('', '## Subclasses', `- ${c.subclasses.join(', ')}`)
+  }
+  lines.push('', '## Level table')
+  for (const row of c.table ?? []) {
+    const parts = [`prof ${row.profBonus}`]
+    if (row.features?.length > 0) parts.push(row.features.join(', '))
+    if (row.cantripsKnown !== undefined) parts.push(`cantrips ${row.cantripsKnown}`)
+    if (row.preparedSpells !== undefined) parts.push(`prepared ${row.preparedSpells}`)
+    if (row.spellsKnown !== undefined) parts.push(`known ${row.spellsKnown}`)
+    if (row.spellSlots !== undefined) {
+      parts.push('slots ' + Object.entries(row.spellSlots).map(([lv, n]) => `L${lv}:${n}`).join(' '))
+    }
+    lines.push(`- Lv${row.level}: ` + parts.join(' | '))
+  }
+  return lines.join(NL)
+}
+
+// 2024 class route: match against the structured classes array and render.
+function classReference2024(data, query, max) {
+  const classes = Array.isArray(data.classes) ? data.classes : []
+  const wanted = query.trim().toLowerCase()
+  const hits = classes.filter((c) => String(c.name ?? '').toLowerCase().includes(wanted))
+  if (hits.length === 0) {
+    return `[no match] No class matches "${query}" (2024). Known: ${classes.map((c) => c.name).join(', ')}.`
+  }
+  const top = hits.slice(0, Math.max(1, Math.min(max, 3)))
+  const SEP = NL + NL + '=====' + NL + NL
+  return top.map(renderClass2024).join(SEP)
+}
 /** Render one dataset entry as compact markdown. */
 function formatEntry(entry, category) {
   const name = entry.name ?? '(unnamed)'
@@ -296,13 +347,22 @@ export function buildTools(ctx) {
         return `Unknown category "${args.category}". Known: ${Object.keys(CATEGORY_KEYS).join(', ')}.`
       }
       // The full-text class document and the curated supplement are both
-      // 2014 assets; 2024 classes live in the structured dataset itself.
+      // 2014 assets; 2024 classes are rendered from the structured dataset.
       if (ruleset === '2014') {
         if (wantedKey === 'classes') return await classReference(fs, String(args.query), max)
         if (wantedKey === undefined) {
           const className = await matchClassName(fs, String(args.query))
           if (className !== undefined) return await classReference(fs, className, max)
         }
+      } else if (wantedKey === 'classes' || wantedKey === undefined) {
+        const classes = Array.isArray(data.classes) ? data.classes : []
+        const wanted = query.toLowerCase()
+        const classHit = classes.find((c) => String(c.name ?? '').toLowerCase() === wanted)
+          ?? classes.find((c) => String(c.name ?? '').toLowerCase().startsWith(wanted))
+        if (wantedKey === 'classes' && classHit === undefined) {
+          return classReference2024(data, String(args.query), max)
+        }
+        if (classHit !== undefined) return classReference2024(data, String(classHit.name), max)
       }
       const keys = wantedKey !== undefined
         ? [wantedKey]
