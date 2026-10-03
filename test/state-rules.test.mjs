@@ -254,12 +254,6 @@ test('a negative item quantity is an error', () => {
   assert.ok(hasErrors(validateState(s)))
 })
 
-test('an unnamed attack warns', () => {
-  const s = base()
-  s.attacks = [{ name: '', bonus: 5 }]
-  assert.ok(validateState(s).some((x) => x.field === 'attacks.0'))
-})
-
 test('validation never mutates the state it is given', () => {
   const s = base()
   s.currency = { gp: 8, sp: 0, cp: -15 }

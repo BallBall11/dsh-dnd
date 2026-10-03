@@ -89,7 +89,6 @@ const CHARACTER_PAYLOAD = {
       spellcasting: { saveDC: null, attackBonus: null },
       spellSlots: {},
       skills: { Athletics: { proficient: true, bonus: 5 } },
-      attacks: [{ name: 'Longsword', bonus: 5, damage: '1d8+3' }],
     },
     display: { currency: '8 gp 0 sp 0 cp', hp: '24/28', level: 3, class: 'Fighter', race: 'Human' },
     findings: [],

@@ -71,6 +71,8 @@ const CSS = `
 .dnd-slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .dnd-slot{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:3px 8px;font-size:12px}
 .dnd-slot i{font-style:normal;color:var(--dsw-alias-label-secondary)}
+.dnd-spells{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+.dnd-label{font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:6px}
 `
 
 /** Inject the stylesheet once, keyed so a reload does not stack duplicates. */
@@ -184,6 +186,31 @@ function Findings({ findings }) {
     ...warnings.map((f, i) => React.createElement('div', { key: 'w' + i, className: 'dnd-warn' }, f)))
 }
 
+/**
+ * The castable spell surface: cantrips, prepared spells and the spellbook.
+ * The Host already splits `spells` into the three lists, so the panel only
+ * decides how to present them — it must not re-derive what is "castable",
+ * otherwise the panel and the sheet grow two opinions. There is no attacks
+ * list: the sheet parser's weapon rows were neither complete (no unarmed,
+ * no spell attacks) nor actionable, so the state model dropped them.
+ */
+function ActionList({ st }) {
+  const spells = st.spells ?? {}
+  const lists = [
+    ['戏法', Array.isArray(spells.cantrips) ? spells.cantrips : []],
+    ['已准备', Array.isArray(spells.prepared) ? spells.prepared : []],
+    ['法术书', Array.isArray(spells.spellbook) ? spells.spellbook : []],
+  ]
+  if (!lists.some(([, items]) => items.length > 0)) return null
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'dnd-muted' }, '戏法 / 法术'),
+    ...lists.flatMap(([label, items]) => items.length === 0 ? [] : [
+      React.createElement('div', { key: label + '-label', className: 'dnd-label' }, label),
+      React.createElement('div', { key: label + '-items', className: 'dnd-spells' },
+        ...items.map((name, i) => React.createElement('span', { key: i, className: 'dnd-tag' }, name))),
+    ]))
+}
+
 function Character({ character }) {
   const st = character.state
   if (st === null || st === undefined) {
@@ -247,14 +274,7 @@ function Character({ character }) {
         '熟练：',
         ...proficiency.map((p) => React.createElement('span', { key: p, className: 'dnd-pro' }, p + ' ')))
       : null,
-    Array.isArray(st.attacks) && st.attacks.length > 0
-      ? React.createElement('div', null,
-        React.createElement('div', { className: 'dnd-muted' }, '攻击'),
-        ...st.attacks.map((a, i) => React.createElement('div', { key: i, className: 'dnd-row' },
-          React.createElement('span', null, a.name),
-          React.createElement('span', null,
-            (a.bonus >= 0 ? '+' : '') + a.bonus + (a.damage ? ' · ' + a.damage : '')))))
-      : null,
+    React.createElement(ActionList, { st }),
     React.createElement(Findings, { findings: character.findings }))
 }
 

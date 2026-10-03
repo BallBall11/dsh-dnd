@@ -4,6 +4,20 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/); versioning adheres to
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **The character panel's "攻击" list is gone.** The sheet parser's weapon
+  table was neither complete (no unarmed strikes, no spell attacks) nor
+  actionable, so `attacks` is dropped from the state model entirely:
+  `splitSheet` no longer extracts it, `state-schema` no longer normalizes or
+  validates it, `dnd_character_get` no longer reports it, and the panel
+  replaces the list with the character's actual castable surface —
+  戏法 / 已准备 / 法术书, straight from `spells`. An existing `.state.json`
+  that still carries an `attacks` key loses it on the next write; the sheet's
+  own `## Attacks` markdown is preserved as narrative prose.
+
 ## [0.3.0] — 2026-09-2x
 
 ### Added

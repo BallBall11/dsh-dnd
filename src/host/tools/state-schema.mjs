@@ -6,7 +6,7 @@
  * A character sheet mixes two kinds of content that must not share a
  * representation:
  *
- *   structured — six abilities, HP, AC, skills, attacks, spell slots, spells,
+ *   structured — six abilities, HP, AC, skills, spell slots, spells,
  *                equipment, currency. Finite, unambiguous, machine-owned.
  *   narrative  — the player's own sentence, backstory, and the Features &
  *                Traits entries. Prose. Reformatting destroys it.
@@ -67,7 +67,7 @@ const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
 const TOP_LEVEL_ORDER = [
   'schema', 'name',
   'identity', 'abilities', 'combat', 'saves', 'proficientSaves',
-  'skills', 'attacks', 'spellcasting', 'spellSlots', 'spells',
+  'skills', 'spellcasting', 'spellSlots', 'spells',
   'equipment', 'currency', 'conditions', 'warnings', 'appliedKeys',
 ]
 
@@ -105,7 +105,6 @@ const ALWAYS_PRESENT = {
   spells: () => ({ cantrips: [], spellbook: [], prepared: [] }),
   equipment: () => ({ weapons: {}, armour: {}, gear: {} }),
   skills: () => ({}),
-  attacks: () => [],
   abilities: () => ({}),
   saves: () => ({}),
   proficientSaves: () => [],
@@ -192,19 +191,6 @@ export function normalizeState(state) {
         }
       }
       out.skills = skills
-      continue
-    }
-
-    if (key === 'attacks') {
-      out.attacks = (Array.isArray(value) ? value : [])
-        .filter(isPlainObject)
-        .map((a) => ({
-          name: a.name ?? '',
-          bonus: numOrNull(a.bonus),
-          damage: a.damage ?? null,
-          type: a.type ?? null,
-          notes: a.notes ?? null,
-        }))
       continue
     }
 

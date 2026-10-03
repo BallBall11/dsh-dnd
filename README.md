@@ -80,7 +80,7 @@ campaigns/<campaign>/characters/alice.state.json   structured state — authorit
 campaigns/<campaign>/characters/alice.md           frontmatter + summary + prose
 ```
 
-The `.state.json` holds abilities, HP, AC, skills, attacks, spell slots, spells,
+The `.state.json` holds abilities, HP, AC, skills, spell slots, spells,
 equipment, currency, conditions and XP. The `.md` holds the YAML frontmatter
 (who the file belongs to, both clocks), a generated summary block fenced by
 `<!-- dsh-dnd:generated -->` markers, and the narrative — the player's own
@@ -143,7 +143,7 @@ default — a DM saying "take 5 damage" twice means 10.
 A character panel registered into two slots: a `sidebar.footer.action` toggle
 (⚔) and a `shell.overlay` card. It shows HP with a coloured band, the six
 abilities with modifiers, AC, initiative and speed, spell save DC, coin, spell
-slots, proficiencies, attacks — and any validation findings, rendered explicitly
+slots, proficiencies, spells — and any validation findings, rendered explicitly
 rather than hidden, because a DM reading a plausible number that is not true is
 the failure this whole design is aimed at.
 

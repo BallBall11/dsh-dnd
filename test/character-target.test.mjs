@@ -187,7 +187,6 @@ const stateFor = (stem) => ({
   saves: { STR: 0, DEX: 0, CON: 0, INT: 0, WIS: 0, CHA: 0 },
   proficientSaves: [],
   skills: {},
-  attacks: [],
   spellcasting: { ability: null, saveDC: null, attackBonus: null },
   spellSlots: {},
   spells: { cantrips: [], spellbook: [], prepared: [] },

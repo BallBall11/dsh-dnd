@@ -64,7 +64,6 @@ line('saves', Object.entries(s.saves).map(([k, v]) => `${k} ${v >= 0 ? '+' : ''}
 line('proficient saves', s.proficientSaves.join(', '))
 line('skills', `${Object.keys(s.skills).length} entries`)
 line('  proficient', Object.entries(s.skills).filter(([, v]) => v.proficient).map(([k]) => k).join(', '))
-line('attacks', s.attacks.map((a) => `${a.name} ${a.bonus >= 0 ? '+' : ''}${a.bonus} ${a.damage}`).join(' | '))
 line('spell ability', s.spellcasting.ability)
 line('spell saveDC/atk', `${s.spellcasting.saveDC} / +${s.spellcasting.attackBonus}`)
 line('spell slots', Object.entries(s.spellSlots).map(([l, v]) => `L${l} ${v.total - v.used}/${v.total}`).join(', '))

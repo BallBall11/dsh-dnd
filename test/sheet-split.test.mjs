@@ -159,7 +159,10 @@ test('frontmatter is parsed and kept out of the narrative', () => {
   const { metadata, narrative } = splitSheet(ALICE)
   assert.equal(metadata.campaign, 'morgansfort')
   assert.equal(metadata.player, '—')
-  assert.ok(!narrative.includes('---'), 'the fence must not leak into the narrative')
+  // The Attacks table's `|---|` separator legitimately lives in the narrative
+  // now that the section is preserved as prose, so only the frontmatter
+  // fence itself (a line that is exactly three dashes) is forbidden.
+  assert.ok(!narrative.split('\n').some((l) => l.trim() === '---'), 'the fence must not leak into the narrative')
   assert.ok(!narrative.includes('campaign: morgansfort'), 'frontmatter must not leak')
 })
 
@@ -207,7 +210,7 @@ test('a file with no frontmatter does not gain an empty one', () => {
 // --- the core guarantee ---------------------------------------------------
 test('narrative excludes every structured section', () => {
   const { narrative } = splitSheet(ALICE)
-  for (const gone of ['## Ability Scores', '## Combat Stats', '## Skills', '## Attacks', '## Spell Slots', '## Equipment']) {
+  for (const gone of ['## Ability Scores', '## Combat Stats', '## Skills', '## Spell Slots', '## Equipment']) {
     assert.ok(!narrative.includes(gone), `narrative must not contain ${gone}`)
   }
 })
@@ -228,7 +231,7 @@ test('narrative keeps Character Pillar and Backstory with CJK intact', () => {
 test('narrative text is byte-identical to its source sections', () => {
   const { narrative, sections } = splitSheet(ALICE)
   const expected = sections
-    .filter((s) => s.heading === null || (!/^(identity|ability scores|combat stats|saving throws|skills|attacks|spell slots|known spells|equipment)/i.test(s.heading)))
+    .filter((s) => s.heading === null || (!/^(identity|ability scores|combat stats|saving throws|skills|spell slots|known spells|equipment)/i.test(s.heading)))
     .map((s) => s.raw)
     .join('\n')
     .trim()
@@ -296,13 +299,6 @@ test('extracts skills', () => {
   assert.equal(state.skills.Arcana.bonus, 5)
   assert.equal(state.skills.Arcana.proficient, true)
   assert.equal(state.skills.Stealth.proficient, false)
-})
-
-test('extracts attacks with CJK names', () => {
-  const { state } = splitSheet(ALICE)
-  assert.equal(state.attacks.length, 1)
-  assert.equal(state.attacks[0].name, '电爪 Shocking Grasp')
-  assert.equal(state.attacks[0].bonus, 5)
 })
 
 test('extracts spell slots', () => {
@@ -507,7 +503,6 @@ if (existsSync(REAL)) {
     // State is extracted once, from the original. Losing fields here would
     // mean data loss on migration, which no amount of later idempotence fixes.
     assert.equal(Object.keys(state.skills).length, 18)
-    assert.equal(state.attacks.length, 2)
     assert.equal(state.saves.INT, 5)
     assert.deepEqual(state.proficientSaves, ['INT', 'WIS'])
     assert.equal(state.equipment.gear.Parchment, 8)

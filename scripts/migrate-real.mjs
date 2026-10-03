@@ -191,7 +191,6 @@ const NUMBERS = [
   ['proficient saves INT, WIS', st.proficientSaves.includes('INT') && st.proficientSaves.includes('WIS')],
   ['18 skills', Object.keys(st.skills).length === 18],
   ['3 proficient skills', Object.values(st.skills).filter((s) => s.proficient).length === 3],
-  ['attack bonus +5 x2', st.attacks.every((a) => a.bonus === 5) && st.attacks.length === 2],
   ['spell DC 13 / attack +5', st.spellcasting.saveDC === 13 && st.spellcasting.attackBonus === 5],
   ['1st-level slots 2 total, 0 used', st.spellSlots['1'].total === 2 && st.spellSlots['1'].used === 0],
   ['6 cantrips', st.spells.cantrips.length === 6],

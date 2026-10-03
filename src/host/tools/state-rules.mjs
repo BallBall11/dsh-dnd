@@ -295,14 +295,6 @@ export function validateState(state) {
     }
   }
 
-  // --- attacks ------------------------------------------------------------
-  for (const [i, attack] of (state.attacks ?? []).entries()) {
-    if (attack.name === '' || attack.name === null) add(`attacks.${i}`, 'warn', 'attack has no name')
-    if (attack.bonus !== null && attack.bonus !== undefined && !isNum(attack.bonus)) {
-      add(`attacks.${i}.bonus`, 'warn', 'attack bonus is not a number')
-    }
-  }
-
   return findings
 }
 

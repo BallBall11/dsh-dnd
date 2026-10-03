@@ -214,7 +214,6 @@ await test('the response carries real state', async () => {
   assert.deepEqual(alice.state.combat.hp, { current: 8, max: 8 })
   assert.deepEqual(alice.state.spellSlots, { 1: { total: 2, used: 0 } })
   assert.equal(alice.state.currency, 800, 'money is a single copper total')
-  assert.equal(alice.state.attacks[0].name, '电爪 Shocking Grasp', 'CJK survives JSON')
 })
 
 await test('the response carries display projections', async () => {

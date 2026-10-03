@@ -52,10 +52,6 @@ const ALICE = {
     Arcana: { ability: 'INT', bonus: 5, proficient: true },
     Perception: { ability: 'WIS', bonus: 2, proficient: true },
   },
-  attacks: [
-    { name: '电爪 Shocking Grasp', bonus: 5, damage: '1d8', type: 'Lightning', notes: null },
-    { name: 'Ray of Frost', bonus: 5, damage: '1d8', type: 'Cold', notes: null },
-  ],
   spellcasting: { ability: 'INT', saveDC: 13, attackBonus: 5 },
   spellSlots: { 1: { total: 2, used: 0 } },
   spells: {
@@ -130,7 +126,6 @@ test('a clean file reports no duplicate-key warning', () => {
 // --- fidelity -------------------------------------------------------------
 test('non-ASCII names survive a round trip', () => {
   const { state } = parseState(serializeState(ALICE))
-  assert.equal(state.attacks[0].name, '电爪 Shocking Grasp')
   assert.ok(state.spells.cantrips.includes('电爪 Shocking Grasp'))
 })
 

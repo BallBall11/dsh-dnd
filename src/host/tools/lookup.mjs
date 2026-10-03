@@ -149,7 +149,7 @@ export function buildTools(ctx) {
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Name or partial name, e.g. "fireball", "goblin", "longsword", "poisoned".', required: true },
+        query: { type: 'string', description: 'Name or partial name, e.g. "fireball", "goblin", "longsword", "poisoned".' },
         category: {
           type: 'string',
           description: 'Optional category filter. Omit to search every category.',

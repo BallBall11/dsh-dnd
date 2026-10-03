@@ -80,17 +80,6 @@ test('parses identity, HP, AC, abilities', () => {
   assert.equal(c.xpNext, '300')
 })
 
-test('parses skills and attacks', () => {
-  const c = parseCharacterSheet(ALICE)
-  assert.equal(c.skills.length, 2)
-  assert.equal(c.skills[0].name, 'Arcana')
-  assert.equal(c.skills[0].proficient, true)
-  assert.equal(c.skills[1].proficient, false)
-  assert.equal(c.attacks.length, 2)
-  assert.equal(c.attacks[0].name, '电爪 Shocking Grasp')
-  assert.equal(c.attacks[0].bonus, '+5')
-})
-
 test('parses a single spell-slot row', () => {
   const c = parseCharacterSheet(ALICE)
   assert.deepEqual(c.spellSlots, { level: 1, total: 2, used: 1 })
@@ -342,47 +331,6 @@ if (existsSync(REAL_SHEET)) {
     assert.equal(real.skills.length, 18)
     const proficient = real.skills.filter((s) => s.proficient).map((s) => s.name).sort()
     assert.deepEqual(proficient, ['Arcana', 'History', 'Perception'])
-  })
-
-  test('the real sheet yields its attacks', () => {
-    assert.equal(real.attacks.length, 2)
-    assert.ok(real.attacks.some((a) => a.name.includes('Shocking Grasp')), JSON.stringify(real.attacks))
-    assert.ok(real.attacks.every((a) => a.bonus === '+5'), JSON.stringify(real.attacks))
-  })
-
-  test('the real sheet yields each attack\'s Notes, not just its numbers', () => {
-    // This column was silently dropped: the parser read four of the five
-    // columns the template defines, so the tactics text never reached the state
-    // file. It is not filler — it is what a DM consults mid-combat — and the
-    // schema already had a `notes` field waiting for it.
-    const grasp = real.attacks.find((a) => a.name.includes('Shocking Grasp'))
-    assert.ok(grasp.notes && grasp.notes.length > 0,
-      'Shocking Grasp has a Notes column in the real sheet: ' + JSON.stringify(grasp))
-    assert.match(grasp.notes, /借机攻击|opportunity/i, grasp.notes)
-
-    const frost = real.attacks.find((a) => a.name.includes('Ray of Frost'))
-    assert.ok(frost.notes && frost.notes.length > 0, JSON.stringify(frost))
-    assert.match(frost.notes, /速度|speed/i, frost.notes)
-  })
-
-  test('an explicit "none" in the Notes column reads as empty, not as a note', () => {
-    // Real sheets say `*(none)*`, `—` or `-` to mean "nothing here". Storing
-    // that text would put the word "none" in front of the DM as though it were
-    // a tactic.
-    const c = parseCharacterSheet([
-      '# Test',
-      '',
-      '## Attacks',
-      '| Name | Attack Bonus | Damage | Type | Notes |',
-      '|------|-------------|--------|------|-------|',
-      '| Dagger | +3 | 1d4 | Piercing | *(none)* |',
-      '| Sling | +3 | 1d4 | Bludgeoning | — |',
-      '| Staff | +3 | 1d6 | Bludgeoning | - |',
-      '',
-    ].join('\n'))
-    for (const a of c.attacks) {
-      assert.equal(a.notes, '', `${a.name} should have no note, got ${JSON.stringify(a.notes)}`)
-    }
   })
 
   test('the real sheet yields currency and cantrips', () => {

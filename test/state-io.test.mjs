@@ -178,7 +178,6 @@ await test('derives the full state from an unmigrated sheet', async () => {
   assert.equal(state.saves.INT, 5)
   assert.deepEqual(state.proficientSaves, ['INT', 'WIS'])
   assert.equal(state.skills.Arcana.bonus, 5)
-  assert.equal(state.attacks[0].name, '电爪 Shocking Grasp')
   assert.deepEqual(state.spellSlots, { 1: { total: 2, used: 0 } })
   assert.equal(state.equipment.weapons['Quarterstaff (Sage)'], 1)
   assert.equal(state.currency, 800, 'money is stored as one integer, not three fields')
@@ -275,7 +274,6 @@ await test('a migrated character reads state from the JSON, not the .md', async 
 await test('the migrated state is fully intact', async () => {
   const { state } = await readCharacter(fs, dir, 'alice')
   assert.equal(Object.keys(state.skills).length, 1)
-  assert.equal(state.attacks.length, 1)
   assert.equal(state.equipment.gear['Spellbook (arcane focus)'], 1)
   assert.deepEqual(state.spellSlots, { 1: { total: 2, used: 0 } })
 })
