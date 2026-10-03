@@ -1,8 +1,8 @@
 {
   "name": "dsh-dnd",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "D&D for DSH: a native Host tool suite (dice, SRD lookup, campaign search, character state, XP and coin) plus a Client character panel, backed by a two-file character model with one authoritative copy of every number.",
+  "description": "D&D for DSH: a native Host tool suite (dice, SRD lookup, campaign search, character state, XP and coin), a Client character panel, and the D&D Game Master agent preset — one unified bundle install.",
   "type": "module",
   "main": "lib/host/index.mjs",
   "exports": {

@@ -4,6 +4,27 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/); versioning adheres to
 [SemVer](https://semver.org/).
 
+## [0.3.0] — 2026-09-2x
+
+### Added
+
+- **The `dnd-gm` agent preset is now declared by the bundle** (`preset-dnd-gm`
+  row of `@deepseek-ai/dsh-agent-preset`), making `dsh-dnd` a single unified
+  install: Host tools, Client character panel AND the D&D Game Master preset.
+
+### Removed
+
+- Nothing runs any more. The preset previously lived as a user-authored
+  directory at `$DSH_HOME/.agent-presets/dnd-gm/` (`agent.cordis.yml` +
+  `preset.yml`), read by the legacy `@deepseek-ai/dsh-agent-presets`
+  directory loader. dsh 0.1.7 replaced that loader with the declarative
+  `@deepseek-ai/dsh-agent-preset-registry` plus bundle-declared `preset-*`
+  rows, so nothing reads the legacy directory any more and `dnd-gm` fell off
+  the roster while its files stayed on disk. The bundle declaration restores
+  it; the legacy directory is now dead weight and can be deleted.
+- The preset's old `./dnd-host.mjs` row is not carried over: the dnd tools are
+  the host-plane `dnd` bundle row, mounted for every session already.
+
 ## [0.2.0] — 2026-09-17
 
 A rewrite, not an increment. v0.1.0 could not load at all: its Client half used

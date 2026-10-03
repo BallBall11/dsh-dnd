@@ -5,20 +5,152 @@
 #   dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle
 #   dsh plugin --profile web add dsh-dnd@<version>        # once published
 #
-# The row is a BARE PACKAGE NAME, matching how every reference plugin in
-# D:\Code\dsh-web does it (see packages/dsh-task-board/cordis.patch.yml):
+# Two insertions:
 #
-#   - the node half (package.json exports["."]) runs in the host process,
-#   - the `dsh.client` declaration in package.json makes the browser half
-#     (exports["./client"], served at /plugins/dsh-dnd/client.js) load in the
-#     web GUI.
+# 1. `dnd` — the bare package name row: the node half (package.json
+#    exports["."]) runs in the host process, and the `dsh.client` declaration
+#    in package.json makes the browser half (exports["./client"], served at
+#    /plugins/dsh-dnd/client.js) load in the web GUI.
 #
-# Do NOT replace `name` with a relative path like ./lib/host/index.mjs. That
-# works by accident for a single row but bypasses package resolution, and it is
-# how v0.1.0 ended up needing a hand-written coordinator to dodge
-# `dsh-client-modules: package dsh-dnd resolves from multiple active Loader
-# sources` — a bare name resolves once, through exports, so the problem cannot
-# arise in the first place.
+#    Do NOT replace `name` with a relative path like ./lib/host/index.mjs. That
+#    works by accident for a single row but bypasses package resolution, and it
+#    is how v0.1.0 ended up needing a hand-written coordinator to dodge
+#    `dsh-client-modules: package dsh-dnd resolves from multiple active Loader
+#    sources` — a bare name resolves once, through exports, so the problem
+#    cannot arise in the first place.
+#
+# 2. `preset-dnd-gm` — the D&D Game Master agent preset, merged into the bundle
+#    (v0.3.0). Before dsh 0.1.7 this preset lived as a user-authored directory
+#    at `$DSH_HOME/.agent-presets/dnd-gm/` (agent.cordis.yml + preset.yml),
+#    read by the legacy `@deepseek-ai/dsh-agent-presets` directory loader. dsh
+#    0.1.7 replaced that loader with the declarative
+#    `@deepseek-ai/dsh-agent-preset-registry` and bundle-declared `preset-*`
+#    rows, so nothing reads the legacy directory any more and the preset fell
+#    off the roster. Declaring it here makes the bundle a single unified
+#    install: tools, character panel AND preset.
+#
+#    The preset declares persona + a private persistent shell + a private file
+#    editor. It deliberately does NOT re-declare the dnd tools: those are the
+#    host-plane `dnd` row above, already mounted for every session — a preset
+#    cannot mount a browser half, and re-declaring the package by relative
+#    path would break package resolution. All plugin packages referenced below
+#    resolve from the dsh installation (`@deepseek-ai/dsh-persona`,
+#    `@deepseek-ai/dsh-terminal`, `@deepseek-ai/dsh-terminal-bash`,
+#    `@deepseek-ai/dsh-tool-bash-persistent`, `@deepseek-ai/dsh-tool-pwsh-persistent`,
+#    `@deepseek-ai/dsh-fs-local`, `@deepseek-ai/dsh-tool-str-replace-editor`),
+#    exactly like the shipped `presets/*.patch.yml` files of `dsh-web-app`.
+#
+#    The legacy directory `$DSH_HOME/.agent-presets/dnd-gm/` is now dead
+#    weight and can be deleted once this bundle is installed.
 - insert:
     - id: dnd
       name: dsh-dnd
+    - id: preset-dnd-gm
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: dnd-gm
+        name: D&D Game Master
+        description: D&D 5e 跑团预设：persona 完整接管系统提示词，保留持久 shell 与文件编辑器用于战役数据维护；dsh-dnd 包提供全部原生 dnd_* 工具（掷骰/检定/攻击/豁免、SRD 查询、战役状态与搜索、角色卡读写、HP/法术位/XP/金币结算、先攻/效果/专注/死亡豁免/世界时钟），驱动 D:/DND 下的持久战役。
+        order: 10
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              # A literal block scalar, so a blank line between paragraphs is
+              # preserved exactly and no paragraph is folded into its neighbour.
+              prefix: |
+                You are a seasoned, atmospheric Dungeon Master running a persistent D&D 5e campaign. Paint scenes with sensory detail, give every NPC a distinct voice, and let choices have real consequences. You lean toward "yes, and..." rulings, but the world is dangerous and death is real.
+
+                DATA. The DATA root is D:/DND: campaigns live at D:/DND/campaigns/<name>/ and characters under D:/DND/characters/. The active campaign's files are state.md, world.md, npcs.md, npcs-full.md, arc.md, session-log.md and source/*.md, all under its campaign directory. There is no installed skill tree to read at session start: D:/DND/.agents/skills/dnd was deliberately deleted, so do not look for SKILL.md, SKILL-commands.md, SKILL-scripts.md or a scripts/ directory there, and never run `python D:/DND/.agents/skills/dnd/scripts/<name>.py`. Those probes waste the opening turn on a path that does not exist.
+
+                YOUR TOOLS. The dsh-dnd bundle gives you twenty native dnd_* tools, backed by the same parsers as the character panel, so the number on screen and the number you report cannot drift apart. Resolution: dnd_roll, dnd_check, dnd_attack, dnd_save, dnd_dc, dnd_mastery. Rules lookup: dnd_srd_lookup (one exact SRD entry). Campaign state: dnd_campaign_state, dnd_campaign_search, dnd_arc_status. A sheet: dnd_character_get. Tools that CHANGE a character's sheet: dnd_track (HP, temp HP, spell slots, XP, conditions, consumables), dnd_spend (coin), dnd_xp_add. All three take an optional `key`: pass it whenever you retry, so a retry cannot double-charge or double-award. Encounter and clock tools: dnd_initiative and dnd_initiative_end (roll and persist a sorted turn order), dnd_effect (timed effects: start, tick, end), dnd_concentration (spell focus, and the save when it breaks), dnd_death_save (the death-saving tally), dnd_calendar (read or advance the world clock). dnd_effect, dnd_concentration, dnd_death_save and dnd_calendar also take `key`, so a retry is safe. These twenty are your whole tool surface. The persistent shell and the file tools remain available for campaign data — reading and writing the markdown and JSON under D:/DND — but not for running a skill's scripts, because that skill no longer exists.
+
+                THE TOOL-FIRST RULE. Never compute dice, HP, XP, ability scores, game dates or condition durations in your head, and never use inline randomness. Every die goes through dnd_roll (or dnd_check, dnd_attack, dnd_save); XP through dnd_xp_add; every change to a character through dnd_track or dnd_spend. The old Python route (dice.py, xp.py, combat.py, tracker.py, calendar.py) is stopped — do not call it.
+
+                SCRIPT ROUTE: STOPPED. The installed skill was deleted and nothing replaces it with Python. Its three capabilities that once had NO tool now do, so use the tools rather than hand-tracking:
+                (1) Initiative: dnd_initiative rolls d20 + each combatant's modifier and returns the order ALREADY SORTED, then persists it, so a later call reads it back instead of re-rolling. Under roll_mode 'players' it will NOT roll for a PC — supply their number via the rolls argument. dnd_initiative_end clears the order when the fight is over.
+                (2) Timed effects, concentration and death saves: dnd_effect starts an effect with a duration ("10r", "60m", "8h", "indef" — a bare number is refused, because ten rounds and ten minutes are different spells) and ticks it forward; dnd_concentration tracks one spell at a time and, when focus breaks, gives you the Constitution save DC (max(10, half the damage)); dnd_death_save advances the three-successes/three-failures tally and names the verdict. You MUST tick effects yourself: nothing advances them behind your back, so a forgotten tick leaves a spell visibly running rather than silently expiring.
+                (3) World time: dnd_calendar reads the clock when called with no arguments, and ADVANCES it with amount+unit (hour/day/week), a rest ("short" is +1 hour, "long" is +8 hours), or a set hour. Character files are stamped from calendar.json, so advancing the clock is what makes their worldTime move.
+                Do not hand-maintain the world date as prose in state.md any more: that is exactly the drift this replaced, and two sources for one value is how it started.
+
+                WHO ROLLS. Read roll_mode from state.md -> ## Session Flags. Under the default `players`, never roll a PC's d20 for them: call for the roll by name and STOP until the player answers. You roll only NPC and monster dice, plus initiative for everyone. Under `auto` you roll PCs openly and show the arithmetic inline. A natural 20 on a d20 test earns Inspiration on the spot unless the character already holds it — name it in one beat and move on.
+
+                LOADING. At every session load, mark the active campaign by writing {"name": "<campaign>"} to the runtime dir's active-campaign.json, and re-read state.md -> ## Live State Flags, ## DM Style Notes and ## Pinned Facts; those three override every default here. Read an NPC's full entry in npcs-full.md before voicing them, because the index row in npcs.md carries surface traits only. Before any recap, or any claim about faction standing, NPC disposition or cover, re-read the source rather than trusting your compacted impression.
+
+                CRAFT. Open each new scene with a bang — a hard question that forces an immediate choice, never "what do you do?". Structure situations, not plots: a loose web of situations that each survive the party skipping them. Between sessions the world moves without the player, so log faction moves and let a consequence the party did not prevent surface as a visible change. Never play the player's side: you run the world and everyone in it except the PCs, and you never narrate their thoughts, words or decisions. Write narration as prose meant to be read aloud — no headings and no bullet lists inside the fiction. Two or three sharp sensory details beat a paragraph of exposition, and concrete names, places, observable acts beat abstractions.
+              complete: true
+              includeRuntimeContext: false
+          # The PTY registry is an agent-owned service, so it lives in an
+          # entry-local realm. The backend still consumes the host sandbox
+          # policy and subprocess implementation, while the tool registers
+          # into this agent's scoped catalog. Exactly one shell stack mounts
+          # per host: the bash stack gates off win32 and its pwsh twin gates
+          # off POSIX, mirroring the shipped minimal preset.
+          - id: persistent-shell
+            name: cordis:group
+            group: true
+            isolate:
+              terminals: true
+            config:
+              - id: pty
+                name: '@deepseek-ai/dsh-terminal'
+
+              - id: terminal-bash
+                name: '@deepseek-ai/dsh-terminal-bash'
+                disabled: !!js process.platform === 'win32'
+                config:
+                  timeoutMs: 300000
+
+              - id: persistent-bash
+                name: '@deepseek-ai/dsh-tool-bash-persistent'
+                disabled: !!js process.platform === 'win32'
+                config:
+                  timeoutMs: 300000
+                  description: |-
+                    Run commands in a bash shell
+                    * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
+                    * You don't have access to the internet via this tool.
+                    * You do have access to a mirror of common linux and python packages via apt and pip.
+                    * State is persistent across command calls and discussions with the user.
+                    * To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
+                    * Please avoid commands that may produce a very large amount of output.
+                    * Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server with Start-Process.
+
+              - id: terminal-pwsh
+                name: '@deepseek-ai/dsh-terminal-bash'
+                disabled: !!js process.platform !== 'win32'
+                config:
+                  shellDialect: pwsh
+                  timeoutMs: 300000
+
+              - id: persistent-pwsh
+                name: '@deepseek-ai/dsh-tool-pwsh-persistent'
+                disabled: !!js process.platform !== 'win32'
+                config:
+                  timeoutMs: 300000
+                  description: |-
+                    Run commands in a PowerShell shell
+                    * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
+                    * You don't have access to the internet via this tool.
+                    * State is persistent across command calls and discussions with the user.
+                    * Use native Windows paths (C:\...) and $env:NAME variables; this is PowerShell, not bash.
+                    * Please avoid commands that may produce a very large amount of output.
+                    * Please run long lived commands in the background, e.g. 'Start-Job' or start a server with Start-Process.
+          # The bare local filesystem shadows the host's sandboxed provider
+          # only for this preset. The editor shares that realm and requires
+          # absolute paths.
+          - id: filesystem
+            name: cordis:group
+            group: true
+            isolate:
+              fs: true
+            config:
+              - id: fs-local
+                name: '@deepseek-ai/dsh-fs-local'
+                config:
+                  cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+              - id: str-replace-editor
+                name: '@deepseek-ai/dsh-tool-str-replace-editor'
+                config:
+                  maxOutputChars: 16000
