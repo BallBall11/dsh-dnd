@@ -96,12 +96,56 @@ function rollHead(label, roll, mod) {
   return `${label !== undefined && label !== '' ? `${label} — ` : ''}d20${ad}${sign} = ${roll.total}${crit}`
 }
 
-/** Double a damage expression's dice: "1d8" -> "2d8", "1d6+2" -> "2d6+2". */
-function doubleDice(spec) {
-  const match = String(spec).replace(/\s+/g, '').match(/^(\d*)d(\d+)(.*)$/)
-  if (match === null) return spec
-  const count = match[1] === '' ? 1 : parseInt(match[1], 10)
-  return `${count * 2}d${match[2]}${match[3] ?? ''}`
+/**
+ * Parse a COMPOUND dice expression: dice terms and constants joined by +/-
+ * — sneak attack's "1d4+3+1d6" is the shape this exists for. Each term is
+ * validated by parseDice, so keep-highest works per term ("1d20kh1+2d6").
+ * @param spec - e.g. "1d4+3+1d6", "2d6-1", "8".
+ * @returns an array of `{ sign, expr }` dice terms and `{ const }` terms,
+ *   or null when unparseable.
+ */
+export function parseDiceChain(spec) {
+  if (typeof spec !== 'string') return null
+  const normalized = spec.replace(/\s+/g, '')
+  if (normalized === '') return null
+  const terms = normalized.match(/[+-]?[^+-]+/g)
+  if (terms === null) return null
+  const chain = []
+  for (const term of terms) {
+    const sign = term[0] === '-' ? -1 : 1
+    const body = term.replace(/^[+-]/, '')
+    if (/^\d+$/.test(body)) {
+      chain.push({ const: sign * parseInt(body, 10) })
+      continue
+    }
+    const expr = parseDice(body)
+    if (expr === null) return null
+    chain.push({ sign, expr })
+  }
+  return chain.length > 0 ? chain : null
+}
+
+/**
+ * Roll a parsed chain, summing signed terms.
+ * @param chain - a parseDiceChain result.
+ * @returns `{ total, text }` — text shows each term's roll.
+ */
+export function rollDiceChain(chain) {
+  let total = 0
+  let text = ''
+  for (const term of chain) {
+    if (term.const !== undefined) {
+      total += term.const
+      text += text === '' ? String(term.const) : (term.const < 0 ? ` − ${-term.const}` : ` + ${term.const}`)
+      continue
+    }
+    // Terms never carry an internal modifier (parseDiceChain splits those
+    // into their own constant terms), so the sign applies to dice only.
+    const rolled = rollParsed(term.expr)
+    total += term.sign * rolled.total
+    text += (text === '' ? (term.sign < 0 ? '−' : '') : (term.sign < 0 ? ' − ' : ' + ')) + rolled.text
+  }
+  return { total, text: `${text} = **${total}**` }
 }
 
 /**
@@ -239,7 +283,7 @@ export function buildTools(_ctx) {
       properties: {
         toHit: { type: 'integer', description: 'Attack roll modifier, e.g. +5.' },
         ac: { type: 'integer', description: 'Target Armor Class.' },
-        damage: { type: 'string', description: 'Damage dice expression, e.g. "1d8" or "1d6+2".' },
+        damage: { type: 'string', description: 'Damage expression; compound terms supported, e.g. "1d4+3+1d6" (sneak attack), "2d6+3".' },
         advantage: { type: 'boolean', description: 'Roll the d20 twice, take the higher.' },
         disadvantage: { type: 'boolean', description: 'Roll the d20 twice, take the lower.' },
         label: { type: 'string', description: 'Short label, e.g. "Shocking Grasp".' },
@@ -257,9 +301,13 @@ export function buildTools(_ctx) {
       let out = `${rollHead(args.label, roll, toHit)} vs AC ${ac} → ${hit ? (critical ? 'CRITICAL HIT!' : 'HIT') : 'MISS'}`
       if (critical && roll.total < ac) out += ' (nat 20 always hits)'
       if (!hit || !args.damage) return out
-      const expr = parseDice(critical ? doubleDice(args.damage) : args.damage)
-      if (expr === null) return `${out}\n(unparseable damage expression: "${args.damage}")`
-      const damage = rollParsed(expr)
+      const chain = parseDiceChain(args.damage)
+      if (chain === null) return `${out}\n(unparseable damage expression: "${args.damage}")`
+      // A crit doubles the DICE, not constants: bump every dice term's count.
+      if (critical) {
+        for (const term of chain) if (term.expr !== undefined) term.expr.count *= 2
+      }
+      const damage = rollDiceChain(chain)
       out += `\nDamage ${damage.text}${critical ? ' (crit: dice doubled)' : ''}`
       return out
     },

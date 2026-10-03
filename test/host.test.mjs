@@ -313,6 +313,41 @@ await test('dnd_save resolves', async () => {
   assert.match(out, /CON save — d20\+2 = \d+.*vs DC 14 → (SUCCESS|FAILURE)/, out)
 })
 
+await test('dnd_attack parses compound damage terms', async () => {
+  // Sneak attack's "base + extra dice" shape failed to parse outright, so a
+  // HIT came back with "(unparseable damage expression)". Every hit now rolls
+  // the whole chain.
+  let sawHit = false
+  for (let i = 0; i < 200 && !sawHit; i += 1) {
+    const out = await call('dnd_attack', { toHit: 20, ac: 5, damage: '1d4+3+1d6' })
+    if (!out.includes('MISS')) {
+      sawHit = true
+      assert.match(out, /Damage 1d4[^\n]*\*\*\d+\*\*/, out)
+      assert.ok(!/unparseable/.test(out), out)
+    }
+  }
+  assert.ok(sawHit, 'never hit in 200 tries (toHit +20 vs AC 5)')
+})
+
+await test('dnd_track hp reports the overflow instead of dropping it', async () => {
+  // The clamp to 0 is right, but the overflow is the number the massive-damage
+  // instant-death rule reads — discarding it forced the DM to recompute by hand.
+  const { applyTrackChanges } = await import('../src/host/tools/track.mjs')
+  const dying = { combat: { hp: { current: 3, max: 12 } } }
+  const changes = []
+  applyTrackChanges(dying, { hp: '-8' }, changes)
+  assert.equal(dying.combat.hp.current, 0)
+  // 3 HP absorb part of the 8 damage; the overflow past 0 is what is reported.
+  assert.match(changes[0], /clamped from -5/)
+  assert.match(changes[0], /Overflow damage: 5/)
+  assert.match(changes[0], /no massive-damage death/)
+
+  const dead = { combat: { hp: { current: 2, max: 5 } } }
+  const deadChanges = []
+  applyTrackChanges(dead, { hp: '-9' }, deadChanges)
+  assert.match(deadChanges[0], /Overflow damage: 7 >= HP max 5 — INSTANT DEATH/)
+})
+
 await test('dnd_mastery lists and looks up properties', async () => {
   const all = await call('dnd_mastery', {})
   for (const key of ['Cleave', 'Graze', 'Nick', 'Push', 'Sap', 'Slow', 'Topple', 'Vex']) {

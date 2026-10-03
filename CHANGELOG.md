@@ -8,6 +8,20 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Fixed
 
+- **`dnd_attack` parses compound damage expressions.** `damage: "1d4+3+1d6"`
+  — sneak attack's base-plus-extra-dice shape — used to hit and then report
+  "(unparseable damage expression)", forcing the DM to split the roll across
+  two `dnd_roll` calls. Damage now accepts any chain of dice and constant
+  terms joined by +/- (per-term keep-highest/lowest still works); on a
+  critical hit every dice term doubles while constants stay flat.
+- **`dnd_track` reports overflow damage on the way to 0.** The clamp to 0 was
+  correct, but discarding the overflow threw away exactly the number the
+  massive-damage instant-death rule reads. The change line now states the
+  overflow and judges it against HP max ("Overflow damage: 7 >= HP max 5 —
+  INSTANT DEATH", or "< HP max N, no massive-damage death").
+
+### Changed
+
 - **`dnd_character_create` follows the campaign's declared ruleset.** The
   tool hardcoded ruleset 2014, so a wizard created in a campaign whose
   state.md declares `**Ruleset**: 2024` was born a spellbook caster (3
