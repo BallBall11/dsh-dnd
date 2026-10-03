@@ -69,9 +69,11 @@ const CSS = `
 .dnd-slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .dnd-slot{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:3px 8px;font-size:12px}
 .dnd-slot i{font-style:normal;color:var(--dsw-alias-label-secondary)}
-.dnd-party{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(264px,auto);gap:0;align-items:start;width:max-content}
-.dnd-party>*{padding:0 9px}
+.dnd-party{display:grid;grid-template-columns:repeat(4,minmax(0,264px));align-items:start}
+.dnd-party>*{padding:0 9px;min-width:0;overflow-wrap:anywhere}
 .dnd-party>*+*{border-left:1px solid var(--dsw-alias-border-l1)}
+.dnd-party>*:nth-child(4n+1){border-left:none;padding-left:0}
+.dnd-spells .dnd-tag{overflow-wrap:anywhere}
 .dnd-spells{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0;padding:4px 0}
 .dnd-tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;
   background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);
