@@ -379,18 +379,17 @@ await test('dnd_srd_lookup reports an honest miss', async () => {
   assert.match(out, /No SRD entry matches/, out)
 })
 
-await test('dnd_srd_lookup reads the datasets the PACKAGE ships, for both rulesets', async () => {
+await test('dnd_srd_lookup reads the dataset the PACKAGE ships', async () => {
   // The defect this pins: the datasets were read from the installed skill's
   // code root, which the user deleted on purpose. The tool then answered
   // "dataset not found" for data that was merely somewhere else. Asserting a
-  // real ENTRY for each ruleset proves the dataset was found AND parsed —
-  // a path fix that forgot to ship the files would still fail here.
-  for (const ruleset of ['2014', '2024']) {
-    const out = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster', ruleset })
-    assert.match(out, new RegExp(`\\[ruleset ${ruleset}\\]`), out)
-    assert.match(out, /goblin/i, `ruleset ${ruleset} returned no entry: ${out}`)
-    assert.ok(!/dataset missing/i.test(out), `ruleset ${ruleset} could not find its dataset: ${out}`)
-  }
+  // real ENTRY proves the dataset was found AND parsed — a path fix that
+  // forgot to ship the files would still fail here. Single ruleset by
+  // decision: 2014 only.
+  const out = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster' })
+  assert.match(out, /\[ruleset 2014\]/, out)
+  assert.match(out, /goblin/i, out)
+  assert.ok(!/dataset missing/i.test(out), out)
 })
 
 await test('a missing dataset is distinguishable from a missing entry', async () => {

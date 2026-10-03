@@ -43,6 +43,28 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   campaign's ruleset and AUTO-FILLS spell slots from the class table when the
   caller passes none.
 
+### Changed
+
+- **2014 is the only active ruleset; 2024 content is completed from its
+  authoritative source instead.** `dnd_srd_lookup` loses its `ruleset`
+  override and the campaign `**Ruleset:**` header is no longer consulted —
+  every query serves 2014. The 2024 dataset file stays in `data/` unused, for
+  a future re-activation. The 2024-only `dnd_mastery` tool is removed from
+  the roster (weapon mastery does not exist in 2014).
+- The 2024 dataset's class content is rebuilt from the authoritative
+  structured source (5e-bits/5e-database `src/2024/en`, SRD 5.2 CC-BY-4.0 —
+  the same upstream the dataset was built from), via the committed
+  `scripts/refresh-2024-srd.mjs`:
+    - `classes`: the full 20-level table per class (proficiency bonus,
+      feature names, cantrips known, prepared/known spells, per-level spell
+      slots, class-specific values such as the Bardic Inspiration die), the
+      spellcasting block, subclass names, and starting-equipment options —
+      replacing the seven-field hand skeleton. `dnd_character_create` auto
+      spell-slot fill now uses the real 2024 progression (a 5th-level Bard
+      gets 4/3/2).
+    - `features`: the stale 2014-worded descriptions are replaced with the
+      232 true 2024 features, each carrying its level.
+
 ### Fixed
 
 - **The panel now serves the live session workspace, not the process
