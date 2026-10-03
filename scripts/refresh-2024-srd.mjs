@@ -5,7 +5,7 @@
  * Source: 5e-bits/5e-database `src/2024/en` (SRD 5.2 / D&D 2024, CC-BY-4.0) —
  * the same upstream the dataset was originally built from, fetched fresh.
  * Downloaded to a temp dir (or a dir passed as argv[2]) and merged into
- * `data/dnd5e_srd_2024.json`:
+ * `data/srd-2024.json`:
  *
  *   - `classes`      ← Classes.json + Levels.json + Subclasses.json: per
  *                      class the core traits (hit die, primary ability,
@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const DATA = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'dnd5e_srd_2024.json')
+const DATA = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'srd-2024.json')
 const DIR = process.argv[2]
 const BASE = 'https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2024/en'
 const FILES = ['Classes', 'Levels', 'Features', 'Subclasses']

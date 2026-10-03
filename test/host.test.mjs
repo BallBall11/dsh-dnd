@@ -405,7 +405,7 @@ await test('a missing dataset is distinguishable from a missing entry', async ()
   // Now hide the dataset and require the OTHER message. The stamp is what the
   // cache keys on, so a missing file cannot be served from the cache.
   const realStat = fsService.stat
-  fsService.stat = async (t) => (/dnd5e_srd\.json$/.test(String(t.displayPath)) ? undefined : realStat.call(fsService, t))
+  fsService.stat = async (t) => (/srd-2014.json$/.test(String(t.displayPath)) ? undefined : realStat.call(fsService, t))
   try {
     const absent = await call('dnd_srd_lookup', { query: 'goblin', ruleset: '2014' })
     assert.match(absent, /\[dataset missing\]/, absent)

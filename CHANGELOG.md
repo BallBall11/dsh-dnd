@@ -8,6 +8,21 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Changed
 
+- **Data files renamed and the lookup's data flow made explicit.**
+  `dnd5e_srd.json` → `srd-2014.json`, `dnd5e_srd_2024.json` →
+  `srd-2024.json`, `dnd5e_srd_full.json` → `srd-2014-fulltext.json`,
+  `dnd5e_supplemental.json` → `supplemental.json` — the old names left it
+  unclear which file belonged to which ruleset. `dnd_srd_lookup` is pinned to
+  2014; `srd-2024.json` ships but nothing loads it. The wiring is now
+  documented in code and README, and a gap it exposed was closed:
+  `supplemental.json` was never actually read by any tool. It is now merged
+  into the lookup's scored scan, with curated entries labelled
+  `(category · curated)` so SRD and supplement stay distinguishable. A missing
+  supplemental file is reported as the broken install it is, not a silent
+  no-op.
+
+### Changed
+
 - **Cards now carry a kind, and the panel lists PCs only.** A field session
   created a hostile statblock with `dnd_character_create` and it appeared in
   the player's panel beside the party: the tool stamped every card `pc` and

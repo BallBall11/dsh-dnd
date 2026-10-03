@@ -14,15 +14,24 @@ import { DATA_ROOT, MtimeCache, readActiveCampaign, readTextOrUndefined, dndRoot
 import { sessionOf } from './session-scope.mjs'
 // Single ruleset by decision: the 2024 dataset file still ships in data/ for
 // a future re-activation, but nothing loads it - every query is 2014.
+//
+// Which file answers which query:
+//   - `class` category, or a bare class name with no category
+//     ("bard", "wizard") -> srd-2014-fulltext.json (full class reference).
+//   - everything else -> srd-2014.json, MERGED with supplemental.json
+//     (hand-curated non-SRD spells/features; their entries are tagged
+//     "[curated]" in the output so SRD and supplement stay distinguishable).
 const DATASETS = {
-  2014: `${DATA_ROOT}/dnd5e_srd.json`,}
+  2014: `${DATA_ROOT}/srd-2014.json`,
+}
+const SUPPLEMENTAL = `${DATA_ROOT}/supplemental.json`
 
 // The FULL 2014 SRD (https://github.com/BTMorton/dnd-5e-srd), carried as a
 // complete copy: per-class sections with hit points, proficiencies, starting
 // equipment, the 20-level class table and every feature in prose. Its shape
 // is section objects rather than the array-of-entries shape of DATASETS, so
 // only the `class` category reads it.
-const FULL_DATASET_2014 = `${DATA_ROOT}/dnd5e_srd_full.json`
+const FULL_DATASET_2014 = `${DATA_ROOT}/srd-2014-fulltext.json`
 // The upstream files use LF; the renderers below need newlines without
 // depending on this file's own line-ending convention.
 const NL = String.fromCharCode(10)
@@ -79,9 +88,7 @@ function missingDatasetMessage(path, ruleset) {
     + `dnd_srd_lookup reads its data from the dsh-dnd package's own data/ directory `
     + `(${DATA_ROOT}). A missing file there means the plugin package is incomplete, `
     + `not that the entry does not exist — no search was performed.\n`
-    + `To fix: reinstall the bundle (the datasets ship with it), or copy `
-    + `dnd5e_srd.json / dnd5e_srd_2024.json from the D&D skill's data/ directory `
-    + `into ${DATA_ROOT}.`
+    + `To fix: reinstall the bundle - the datasets ship with it.`
 }
 
 /**
@@ -115,6 +122,22 @@ async function loadFull2014(fs) {
     return { data: JSON.parse(await fs.readText(target)) }
   } catch (error) {
     return { error: `Failed to parse ${FULL_DATASET_2014}: ${error && error.message ? error.message : error}` }
+  }
+}
+
+// Load the curated supplement. It ships with the bundle like the SRD files,
+// so a missing file is the same broken-install condition and gets the same
+// operator-facing message.
+async function loadSupplemental(fs) {
+  const target = await fs.resolve(SUPPLEMENTAL)
+  if ((await fs.stat(target)) === undefined) return { error: missingDatasetMessage(SUPPLEMENTAL, '2014-supplement') }
+  const stat = await fs.stat(target)
+  const stamp = `${stat.mtime ?? ''}:${stat.size ?? ''}`
+  try {
+    const data = await cache.get(`supplemental:${SUPPLEMENTAL}`, stamp, async () => JSON.parse(await fs.readText(target)))
+    return { data }
+  } catch (error) {
+    return { error: `Failed to parse ${SUPPLEMENTAL}: ${error && error.message ? error.message : error}` }
   }
 }
 
@@ -266,13 +289,21 @@ export function buildTools(ctx) {
       if (args.category !== undefined && wantedKey === undefined) {
         return `Unknown category "${args.category}". Known: ${Object.keys(CATEGORY_KEYS).join(', ')}.`
       }
-      if (wantedKey === 'classes') return await classReference(fs, String(args.query), max)      if (wantedKey === undefined) {
+      if (wantedKey === 'classes') return await classReference(fs, String(args.query), max)
+      if (wantedKey === undefined) {
         const className = await matchClassName(fs, String(args.query))
         if (className !== undefined) return await classReference(fs, className, max)
       }
       const keys = wantedKey !== undefined
         ? [wantedKey]
         : Object.keys(data).filter((k) => Array.isArray(data[k]))
+
+      const supplemental = await loadSupplemental(fs)
+      if (supplemental.error !== undefined) return supplemental.error
+      const supData = supplemental.data
+      const supKeys = wantedKey !== undefined
+        ? [wantedKey]
+        : supData !== null && typeof supData === 'object' ? Object.keys(supData).filter((k) => Array.isArray(supData[k])) : []
 
       const scored = []
       for (const key of keys) {
@@ -283,6 +314,18 @@ export function buildTools(ctx) {
           const score = scoreName(String(entry.name ?? ''), query)
           if (score < 0) continue
           scored.push({ entry, category: labelForKey(key), score })
+        }
+      }
+      // Curated non-SRD entries join the same scored scan; the label marks
+      // them so a DM can tell an SRD hit from a house supplement.
+      for (const key of supKeys) {
+        const entries = supData[key]
+        if (!Array.isArray(entries)) continue
+        for (const entry of entries) {
+          if (entry === null || typeof entry !== 'object') continue
+          const score = scoreName(String(entry.name ?? ''), query)
+          if (score < 0) continue
+          scored.push({ entry, category: `${labelForKey(key)} · curated`, score })
         }
       }
       if (scored.length === 0) {
