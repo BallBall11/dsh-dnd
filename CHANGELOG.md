@@ -19,6 +19,14 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   tags and keep counting as PCs. The GM preset's persona now requires the
   kind on every create.
 
+### Changed
+
+- **The panel lays the party out in columns** — one column per character,
+  separated by a hairline, the overlay widening with the party size (min
+  360 px, capped at the viewport) — instead of a single vertical stack.
+  Spell lists get clearer item separation: chips gain a hairline border and
+  wider gaps.
+
 ### Fixed
 
 - **The panel now serves the live session workspace, not the process
