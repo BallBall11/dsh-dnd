@@ -2,7 +2,7 @@
 #
 # Installed with:
 #
-#   dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle
+#   dsh plugin --profile web add git+https://github.com/BallBall11/dsh-dnd.git
 #   dsh plugin --profile web add dsh-dnd@<version>        # once published
 #
 # Two insertions:

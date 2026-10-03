@@ -11,12 +11,16 @@ apart — which is the failure this design exists to prevent.
 ## Install
 
 ```bash
-# from a local git checkout (no registry needed) — the built bundle is committed
-dsh plugin --profile web add link:D:/DND/dsh-dnd-bundle
+# from the GitHub repository — the built bundle is committed
+dsh plugin --profile web add git+https://github.com/BallBall11/dsh-dnd.git
+dsh plugin --profile web add git+ssh://git@github.com/BallBall11/dsh-dnd.git   # SSH
+
+# from a local git checkout (no registry needed)
+dsh plugin --profile web add link:<path-to-a-local-checkout>
 
 # from a registry, once published
 dsh plugin --profile web add dsh-dnd
-dsh plugin --profile web add dsh-dnd@0.2.0     # pinned
+dsh plugin --profile web add dsh-dnd@0.3.0     # pinned
 ```
 
 That single command runs pnpm inside the profile, reconciles
