@@ -20,13 +20,19 @@ original content; each file records its own upstream in `_meta`.
 | `srd-2024.json` | 2024 (SRD 5.2) | [5e-bits/5e-database `src/2024/en`](https://github.com/5e-bits/5e-database/tree/main/src/2024/en) and [foundryvtt/dnd5e](https://github.com/foundryvtt/dnd5e) (`packs/_source`, MIT); `classes` and `features` are refreshed from the 5e-bits source by `scripts/refresh-2024-srd.mjs` | CC-BY-4.0 (Wizards of the Coast), via upstreams whose code is MIT |
 | `srd-2014-fulltext.json` | 2014 (SRD 5.1, full text) | [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) (`5esrd.json`, complete copy) | OGL 1.0a |
 | `supplemental.json` | — | hand-curated additions to the structured datasets | OGL 1.0a |
+| `srd-2024-renames.json` | 2014→2024 rename map | [Converting to SRD 5.2.1](https://media.dndbeyond.com/compendium-images/srd/guide/converting-to-srd-5.2.1.pdf) (Wizards of the Coast) | CC-BY-4.0 |
 
 What `dnd_srd_lookup` reads: with `ruleset: "2014"` (the default), `class`
 queries and bare class names are answered from `srd-2014-fulltext.json` and
 every other category from `srd-2014.json` merged with `supplemental.json`
 (curated entries labelled `(category · curated)`); with `ruleset: "2024"`,
 queries are answered from `srd-2024.json` as-is, including its structured
-`classes` array.
+`classes` array. When a query matches nothing, the 2014→2024 rename map
+(`srd-2024-renames.json`, from the official "Converting to SRD 5.2.1" guide)
+is tried in the other ruleset's naming, so "Goblin" resolves under 2024 to
+Goblin Warrior and "Befuddlement" resolves under 2014 to Feeblemind; stat
+blocks omitted from 5.2.1 (e.g. Lizardfolk) report their recommended
+replacement.
 
 The underlying game text is Wizards of the Coast material, released through
 the OGL 1.0a (SRD 5.1) and CC-BY-4.0 (SRD 5.2). Dungeons & Dragons, D&D and

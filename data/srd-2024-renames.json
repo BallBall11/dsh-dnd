@@ -1,0 +1,53 @@
+{
+ "_meta": {
+  "ruleset": "2014-to-2024 renames",
+  "source": "Converting to System Reference Document 5.2.1 (https://media.dndbeyond.com/compendium-images/srd/guide/converting-to-srd-5.2.1.pdf), (c)2025 Wizards of the Coast, CC-BY-4.0",
+  "purpose": "Maps SRD 5.1 (2014) names to their SRD 5.2.1 (2024) names so lookups under the old name still find the new entry, and lists stat blocks omitted from 5.2.1 together with their recommended replacements."
+ },
+ "spells": {
+  "Feeblemind": "Befuddlement",
+  "Branding Smite": "Shining Smite"
+ },
+ "monsters": {
+  "Flying Sword": "Animated Flying Sword",
+  "Rug of Smothering": "Animated Rug of Smothering",
+  "Azer": "Azer Sentinel",
+  "Bugbear": "Bugbear Warrior",
+  "Centaur": "Centaur Trooper",
+  "Cult Fanatic": "Cultist Fanatic",
+  "Gnoll": "Gnoll Warrior",
+  "Goblin": "Goblin Warrior",
+  "Half-Red Dragon Veteran": "Half-Dragon",
+  "Hobgoblin": "Hobgoblin Warrior",
+  "Kobold": "Kobold Warrior",
+  "Merfolk": "Merfolk Skirmisher",
+  "Minotaur": "Minotaur of Baphomet",
+  "Acolyte": "Priest Acolyte",
+  "Sahuagin": "Sahuagin Warrior",
+  "Gynosphinx": "Sphinx of Lore",
+  "Androsphinx": "Sphinx of Valor",
+  "Thug": "Tough",
+  "Tribal Warrior": "Warrior Infantry",
+  "Veteran": "Warrior Veteran",
+  "Giant Sea Horse": "Giant Seahorse",
+  "Giant Poisonous Snake": "Giant Venomous Snake",
+  "Quipper": "Piranha",
+  "Sea Horse": "Seahorse",
+  "Swarm of Quippers": "Swarm of Piranhas",
+  "Swarm of Poisonous Snakes": "Swarm of Venomous Snakes",
+  "Poisonous Snake": "Venomous Snake"
+ },
+ "magic_items": {
+  "Arrow of Slaying": "Ammunition of Slaying",
+  "Orb of Dragonkind": "Dragon Orb",
+  "Iron Bands of Binding": "Iron Bands",
+  "Deck of Many Things": "Mysterious Deck"
+ },
+ "omitted": {
+  "Duergar": "Spy",
+  "Drow": "Priest Acolyte",
+  "Deep Gnome (Svirfneblin)": "Scout",
+  "Lizardfolk": "Scout",
+  "Orc": "Tough"
+ }
+}

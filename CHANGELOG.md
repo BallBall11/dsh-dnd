@@ -8,6 +8,20 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Changed
 
+- **2014→2024 renames resolve automatically.** Wired the official
+  "Converting to SRD 5.2.1" guide's rename table in as
+  `data/srd-2024-renames.json` (CC-BY-4.0): a 2024 lookup under an old SRD
+  5.1 name ("goblin", "feeblemind") finds the renamed entry and says so
+  ("renamed in SRD 5.2.1"), a 2014 lookup under a new name resolves back
+  ("befuddlement" → Feeblemind), and stat blocks omitted from 5.2.1
+  (Lizardfolk, Duergar, Drow, ...) report the guide's recommended
+  replacement instead of a bare miss. Also audited the SRD 5.2.1 full text
+  for fillable prose: classes open directly with their trait tables and
+  backgrounds are mechanics-only in the SRD, so the remaining thin spots in
+  `srd-2024.json` reflect the source, not omissions.
+
+### Changed
+
 - **2024 dataset gaps closed where the upstream allows.** An audit of
   `srd-2024.json` against its source (5e-bits `src/2024/en`, SRD 5.2,
   CC-BY-4.0) found: species/subspecies traits carried only name stubs with no

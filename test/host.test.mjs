@@ -415,6 +415,30 @@ await test('dnd_srd_lookup rejects an unknown ruleset before searching', async (
   assert.match(out, /Nothing was searched/, out)
 })
 
+await test('a 2024 lookup under a 2014 name resolves through the rename map', async () => {
+  // Per "Converting to SRD 5.2.1": Goblin -> Goblin Warrior, Feeblemind ->
+  // Befuddlement. An old name must find the new entry and SAY it did.
+  const goblin = await call('dnd_srd_lookup', { query: 'goblin warrior', category: 'monster', ruleset: '2024' })
+  assert.match(goblin, /Goblin Warrior/, goblin)
+  const old = await call('dnd_srd_lookup', { query: 'goblin', category: 'monster', ruleset: '2024' })
+  assert.match(old, /Goblin Warrior|Goblin Boss|Goblin Minion/, old)
+  const spell = await call('dnd_srd_lookup', { query: 'feeblemind', ruleset: '2024' })
+  assert.match(spell, /Befuddlement/, spell)
+  assert.match(spell, /renamed in SRD 5\.2\.1/, spell)
+})
+
+await test('a 2014 lookup under a 2024 name resolves back through the rename map', async () => {
+  const out = await call('dnd_srd_lookup', { query: 'befuddlement', ruleset: '2014' })
+  assert.match(out, /Feeblemind/, out)
+  assert.match(out, /SRD 5\.2\.1/, out)
+})
+
+await test('an omitted 2024 stat block points at its recommended replacement', async () => {
+  const out = await call('dnd_srd_lookup', { query: 'lizardfolk', ruleset: '2024' })
+  assert.match(out, /\[omitted in SRD 5\.2\.1\]/, out)
+  assert.match(out, /Scout/, out)
+})
+
 await test('a missing dataset is distinguishable from a missing entry', async () => {
   // These two used to read alike ("not found"), which is how a broken install
   // passed for an ordinary miss. A DM must be able to tell "the lookup table is
