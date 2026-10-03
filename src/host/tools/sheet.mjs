@@ -197,7 +197,9 @@ export function buildTools(ctx) {
       }
       const loaded = await loadCharacters(fs, located.campaign, located.dir, dndRoot(session))
       if (loaded.characters.length === 0) {
-        return `No character sheets found for campaign ${located.campaign}.`
+        return `No character sheets found for campaign ${located.campaign}. `
+        + `Create one with dnd_character_create (structured fields, or template:true for the sheet format); `
+        + `the parser accepts only the canonical format, so do not hand-write a card blindly. Files go under ${located.dir}/characters/.`
       }
 
       let selected = loaded.characters

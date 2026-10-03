@@ -12,6 +12,7 @@
  *   tools/lookup.mjs    dnd_srd_lookup
  *   tools/campaign.mjs  dnd_campaign_state dnd_campaign_search dnd_arc_status
  *   tools/sheet.mjs     dnd_character_get
+ *   tools/character-create.mjs  dnd_character_create
  *   tools/track.mjs     dnd_track dnd_spend dnd_xp_add
  *   tools/calendar.mjs  dnd_calendar
  *   tools/initiative.mjs  dnd_initiative dnd_initiative_end
@@ -27,6 +28,7 @@
  */
 
 import * as roll from './tools/roll.mjs'
+import * as characterCreate from './tools/character-create.mjs'
 import * as lookup from './tools/lookup.mjs'
 import * as campaign from './tools/campaign.mjs'
 import * as sheet from './tools/sheet.mjs'
@@ -46,7 +48,7 @@ import { createProbeState, setWriteProbeState } from './tools/write-probe.mjs'
  * change that was entirely intended. Deriving the number from this list keeps
  * "every family registered" as the actual invariant under test.
  */
-export const FAMILIES = [roll, lookup, campaign, sheet, track, calendar, initiative, effects]
+export const FAMILIES = [roll, lookup, campaign, sheet, characterCreate, track, calendar, initiative, effects]
 
 export const name = 'dnd-host'
 

@@ -1,6 +1,6 @@
 # dsh-dnd
 
-D&D for DSH — a bundle for the DeepSeek Harness **web** profile: fourteen native
+D&D for DSH — a bundle for the DeepSeek Harness **web** profile: twenty-one native
 Host tools plus a Client character panel, backed by a two-file character model.
 
 Every number in a character has exactly one home. The structured state lives in

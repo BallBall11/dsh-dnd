@@ -6,6 +6,27 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Added
+
+- **`dnd_character_create`** closes the empty-campaign gap that stalled a real
+  session's opening turns: with no characters on disk, `dnd_character_get`
+  answered "No character sheets found" and the GM had to guess the sheet
+  format. The new tool takes structured fields (name, race, class, level,
+  abilities, hp, ac, skills, spells, spell slots, equipment, currency,
+  narrative), derives every derivable number (ability modifiers, proficiency
+  bonus, skill and save bonuses, spell DC/attack, initiative, copper totals,
+  hit die), and writes the card through the same validated `writeCharacter`
+  path as `dnd_track` — so a created card is parseable by construction.
+  `template: true` returns the canonical sheet format instead of writing.
+  `dnd_character_get` now points at the tool (and the template) when the party
+  is empty rather than leaving the format to be guessed.
+- The 2024 SRD dataset gains a `classes` array (all twelve classes: hit die,
+  primary ability, proficient saves, armor/weapon training, spellcasting
+  ability), and `dnd_srd_lookup` accepts the `class`, `species`/`race`,
+  `background` and `feat` categories. The create tool defaults hit die, saves
+  and spellcasting ability from the class skeleton when the DM does not pass
+  them.
+
 ### Changed
 
 - **The campaign data root now follows the DSH session's workspace** instead of

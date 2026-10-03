@@ -28,6 +28,11 @@ const CATEGORY_KEYS = {
   'magic-item': 'magic_items',
   'class-feature': 'features',
   feature: 'features',
+  class: 'classes',
+  species: 'species',
+  race: 'species',
+  background: 'backgrounds',
+  feat: 'feats',
   weapon: 'equipment',
   armor: 'equipment',
 }
@@ -76,7 +81,7 @@ function missingDatasetMessage(path, ruleset) {
  * @param ruleset - "2014" or "2024".
  * @returns `{ data }` or `{ error }`.
  */
-async function loadDataset(fs, ruleset) {
+export async function loadDataset(fs, ruleset) {
   const path = DATASETS[ruleset]
   if (path === undefined) return { error: `Unknown ruleset "${ruleset}".` }
   const target = await fs.resolve(path)
