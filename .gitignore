@@ -22,3 +22,4 @@ probe-*.mjs
 # inspection; deliberately not tracked. (Task 2's record asks for exactly this:
 # "仍属临时产物，收尾时移出仓库或进 .gitignore".)
 browser-verify-*.png
+5e-SRD-*.json
