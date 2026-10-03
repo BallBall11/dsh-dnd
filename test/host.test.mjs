@@ -308,6 +308,22 @@ await test('dnd_attack doubles dice on a natural 20', async () => {
   assert.ok(sawCrit, 'never rolled a natural 20 in 400 tries (toHit +20 vs AC 5)')
 })
 
+await test('dnd_attack crit doubles every dice term in a compound chain, constants stay flat', async () => {
+  // Both SRDs: all of the attack's damage dice roll twice, modifiers once —
+  // and SRD 5.2.1 names Sneak Attack's extra dice as included. So "1d4+3+1d6"
+  // crits as 2d4+3+2d6.
+  let sawCrit = false
+  for (let i = 0; i < 400 && !sawCrit; i += 1) {
+    const out = await call('dnd_attack', { toHit: 20, ac: 5, damage: '1d4+3+1d6' })
+    if (out.includes('CRITICAL HIT')) {
+      sawCrit = true
+      assert.match(out, /Damage 2d4[^\n]*\+ 3 \+[^\n]*2d6/, 'every dice term doubles, the +3 does not: ' + out)
+      assert.ok(!/4d4|3d6/.test(out), out)
+    }
+  }
+  assert.ok(sawCrit, 'never rolled a natural 20 in 400 tries')
+})
+
 await test('dnd_save resolves', async () => {
   const out = await call('dnd_save', { mod: 2, dc: 14, label: 'CON save' })
   assert.match(out, /CON save — d20\+2 = \d+.*vs DC 14 → (SUCCESS|FAILURE)/, out)
