@@ -40,7 +40,7 @@ const CSS = `
   color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;padding:0 8px;border-radius:8px;
   white-space:nowrap;height:32px;line-height:1;box-sizing:border-box}
 .dnd-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dnd-overlay{position:fixed;right:16px;top:72px;width:max-content;min-width:360px;max-width:calc(100vw - 32px);max-height:calc(100vh - 96px);
+.dnd-overlay{position:fixed;right:16px;top:72px;width:max-content;min-width:300px;max-width:calc(100vw - 32px);max-height:calc(100vh - 96px);
   overflow-y:auto;z-index:50;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);
   font-family:inherit;font-size:13px;background:var(--dsw-alias-bg-layer-1);
   border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);padding:14px}
@@ -69,8 +69,8 @@ const CSS = `
 .dnd-slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .dnd-slot{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:3px 8px;font-size:12px}
 .dnd-slot i{font-style:normal;color:var(--dsw-alias-label-secondary)}
-.dnd-party{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(320px,auto);gap:0;align-items:start;width:max-content}
-.dnd-party>*{padding:0 12px}
+.dnd-party{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(264px,auto);gap:0;align-items:start;width:max-content}
+.dnd-party>*{padding:0 9px}
 .dnd-party>*+*{border-left:1px solid var(--dsw-alias-border-l1)}
 .dnd-spells{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0;padding:4px 0}
 .dnd-tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;
