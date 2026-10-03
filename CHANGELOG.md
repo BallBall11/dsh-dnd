@@ -6,6 +6,19 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`dnd_character_create` follows the campaign's declared ruleset.** The
+  tool hardcoded ruleset 2014, so a wizard created in a campaign whose
+  state.md declares `**Ruleset**: 2024` was born a spellbook caster (3
+  cantrips, no prepared-spells line) instead of a prepared one — a
+  structural difference, not cosmetics, since the 2024 caster model changes
+  spell capacity on the player's panel. The tool now reads the active
+  campaign's `**Ruleset**` frontmatter line and pulls the class skeleton
+  (hit die, saves, spellcasting, class table) from the matching dataset,
+  defaulting to 2014 when the campaign is silent; the ruleset used is echoed
+  in the reply either way.
+
 ### Changed
 
 - **2014→2024 renames resolve automatically.** Wired the official

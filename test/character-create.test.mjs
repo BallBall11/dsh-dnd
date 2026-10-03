@@ -211,4 +211,38 @@ await test('an unknown skill name warns instead of vanishing', async () => {
   assert.match(out, /Arcana \+2/)
 })
 
+// ─── ruleset follows the campaign ──────────────────────────────────────────
+section('the campaign\'s declared ruleset picks the class dataset')
+
+await test('a 2024 campaign builds its casters from the 2024 class table', async () => {
+  // The regression: the tool hardcoded ruleset 2014, so a wizard in a 2024
+  // campaign was born a spellbook caster (3 cantrips, no prepared line) even
+  // though state.md declared **Ruleset**: 2024 and the 2024 skeleton was in
+  // the dataset all along.
+  writeFileSync(nodePath(tempRoot + '/campaigns/testcamp/state.md'),
+    '---\n- **Name**: testcamp\n- **Ruleset**: 2024\n---\n', 'utf8')
+  try {
+    const out = await tool.execute({ name: 'Modernist', klass: 'Wizard', level: 1, abilities: { INT: 16 } }, exec)
+    assert.match(out, /Class table \(2024\)/, out)
+    assert.match(out, /3 cantrips known/, out)
+    assert.match(out, /4 spells prepared/, out)
+    const state = JSON.parse(readFileSync(nodePath(charactersDir + '/modernist.state.json'), 'utf8'))
+    assert.equal(state.spellcasting.ability, 'INT', 'the 2024 wizard skeleton casts with INT')
+    assert.equal(state.spellSlots['1'].total, 2, '2024 wizard lv1 has two 1st-level slots')
+  } finally {
+    rmSync(nodePath(tempRoot + '/campaigns/testcamp/state.md'), { force: true })
+  }
+})
+
+await test('a 2014 campaign still reads the 2014 table', async () => {
+  writeFileSync(nodePath(tempRoot + '/campaigns/testcamp/state.md'),
+    '---\n- **Name**: testcamp\n- **Ruleset**: 2014\n---\n', 'utf8')
+  try {
+    const out = await tool.execute({ name: 'Traditionalist', klass: 'Wizard', level: 1, abilities: { INT: 16 } }, exec)
+    assert.match(out, /Class table \(2014\)/, out)
+  } finally {
+    rmSync(nodePath(tempRoot + '/campaigns/testcamp/state.md'), { force: true })
+  }
+})
+
 console.log(process.exitCode === 1 ? '\ncharacter-create.test.mjs: FAILURE(S)' : '\ncharacter-create.test.mjs: all assertions passed')
