@@ -8,6 +8,17 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Changed
 
+- **The campaign data root now follows the DSH session's workspace** instead of
+  the hard-coded `D:/DND`. Every `dnd_*` tool resolves its root from the calling
+  session's `header.cwd` at execute time; when no session takes part (HTTP
+  routes, unit tests), the fallback chain is the `DND_ROOT` or `DSH_CWD` env
+  var, then the historical `D:/DND` literal. The GM preset's persona no longer
+  names `D:/DND` either — it speaks of "the session workspace". The bundle is
+  now portable across machines and workspace layouts. The SRD `data/` directory
+  was already package-relative and is unaffected.
+
+### Changed
+
 - **The character panel's "攻击" list is gone.** The sheet parser's weapon
   table was neither complete (no unarmed strikes, no spell attacks) nor
   actionable, so `attacks` is dropped from the state model entirely:

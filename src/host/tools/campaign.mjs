@@ -10,8 +10,8 @@
  * repeated queries do not re-read the whole corpus each time.
  */
 
+import { sessionOf } from './session-scope.mjs'
 import {
-  DND_ROOT,
   MtimeCache,
   activeCampaignDir,
   findSection,
@@ -73,10 +73,10 @@ export function buildTools(ctx) {
   const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
   /** Shared preamble: resolve the campaign or return a message. */
-  async function locate() {
+  async function locate(exec) {
     const fs = getFs()
     if (fs === undefined) return { error: 'fs service unavailable' }
-    const found = await activeCampaignDir(fs)
+    const found = await activeCampaignDir(fs, sessionOf(ctx, exec))
     if (found === undefined) {
       return { error: 'No active campaign. Load one with /dm:dnd load <campaign> (this writes .runtime/active-campaign.json).' }
     }
@@ -95,8 +95,8 @@ export function buildTools(ctx) {
       },
     },
     output: { schema: { type: 'string' }, render: renderText },
-    async execute(args) {
-      const located = await locate()
+    async execute(args, exec) {
+      const located = await locate(exec)
       if (located.error !== undefined) return located.error
       const text = await readTextOrUndefined(located.fs, `${located.dir}/state.md`)
       if (text === undefined) return `No state.md in campaign "${located.campaign}".`
@@ -138,7 +138,7 @@ export function buildTools(ctx) {
       required: ['query'],
     },
     output: { schema: { type: 'string' }, render: renderText },
-    async execute(args) {
+    async execute(args, exec) {
       // Validated before anything is located or indexed. `String(undefined)` is
       // the string "undefined" — non-empty, so the old emptiness check passed
       // and the tool searched the corpus for a word that does not exist,
@@ -149,7 +149,7 @@ export function buildTools(ctx) {
           + 'e.g. "Morgansfort" or "the bronze door". Nothing was searched.'
       }
 
-      const located = await locate()
+      const located = await locate(exec)
       if (located.error !== undefined) return located.error
       const query = String(args.query).toLowerCase().trim()
       const max = Number(args.max) > 0 ? Number(args.max) : 30
@@ -191,8 +191,8 @@ export function buildTools(ctx) {
     description: 'Report the campaign arc\'s current position: for a dynamic arc, the act and beat with what changes; for a structured (imported) arc, the current act/chapter and outstanding beats. Reads state.md first and only touches arc.md when more detail is needed.',
     parameters: { type: 'object', properties: {} },
     output: { schema: { type: 'string' }, render: renderText },
-    async execute() {
-      const located = await locate()
+    async execute(_args, exec) {
+      const located = await locate(exec)
       if (located.error !== undefined) return located.error
       const stateText = await readTextOrUndefined(located.fs, `${located.dir}/state.md`)
       if (stateText === undefined) return `No state.md in campaign "${located.campaign}".`

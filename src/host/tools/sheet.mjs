@@ -9,7 +9,8 @@
  * itself lives in sheet-parse.mjs, which is unit-tested.
  */
 
-import { DND_ROOT, activeCampaignDir, listMarkdown, readTextOrUndefined } from './shared.mjs'
+import { activeCampaignDir, dndRoot, listMarkdown, readTextOrUndefined } from './shared.mjs'
+import { sessionOf } from './session-scope.mjs'
 import { formatCharacter, parseCharacterSheet } from './sheet-parse.mjs'
 import { readCharacter } from './state-io.mjs'
 import { formatCurrency } from './state-rules.mjs'
@@ -133,7 +134,7 @@ export function buildTools(ctx) {
    * @param fs - the resolved filesystem service.
    * @returns `{ campaign, characters, warnings }` or `{ error }`.
    */
-  async function loadCharacters(fs, campaign, dir) {
+  async function loadCharacters(fs, campaign, dir, root) {
     const characters = []
     const warnings = []
     const files = await listMarkdown(fs, `${dir}/characters`)
@@ -141,9 +142,9 @@ export function buildTools(ctx) {
     // No campaign characters/: fall back to the global roster, which is always
     // unmigrated sheets.
     if (files.length === 0) {
-      const globalFiles = await listMarkdown(fs, `${DND_ROOT}/characters`)
+      const globalFiles = await listMarkdown(fs, `${root}/characters`)
       for (const file of globalFiles) {
-        const text = await readTextOrUndefined(fs, file.target ?? `${DND_ROOT}/characters/${file.name}`)
+        const text = await readTextOrUndefined(fs, file.target ?? `${root}/characters/${file.name}`)
         if (text === undefined) continue
         characters.push({ file: file.name, ...parseCharacterSheet(text) })
       }
@@ -186,14 +187,15 @@ export function buildTools(ctx) {
       },
     },
     output: { schema: { type: 'string' }, render: renderText },
-    async execute(args) {
+    async execute(args, exec) {
       const fs = getFs()
       if (fs === undefined) return 'fs service unavailable'
-      const located = await activeCampaignDir(fs)
+      const session = sessionOf(ctx, exec)
+      const located = await activeCampaignDir(fs, session)
       if (located === undefined) {
         return 'No active campaign. Load one with /dm:dnd load <campaign> first.'
       }
-      const loaded = await loadCharacters(fs, located.campaign, located.dir)
+      const loaded = await loadCharacters(fs, located.campaign, located.dir, dndRoot(session))
       if (loaded.characters.length === 0) {
         return `No character sheets found for campaign ${located.campaign}.`
       }

@@ -78,7 +78,7 @@ import { readCalendar } from './clock.mjs'
 import { readCharacter, writeCharacter, listCharacters, statePath } from './state-io.mjs'
 import { formatCurrency, formatCurrencyShort, toCopper, formatFindings } from './state-rules.mjs'
 import { normalizeState, MAX_APPLIED_KEYS } from './state-schema.mjs'
-import { writePolicyFor } from './session-scope.mjs'
+import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
 import { writeProbeState, runWriteSelfCheck } from './write-probe.mjs'
 
@@ -114,8 +114,8 @@ const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
  * @param requested - the caller's `character` argument, possibly undefined.
  * @returns `{ dir, campaign, name, character }` or `{ error }`.
  */
-async function locateCharacter(fs, requested) {
-  const located = await activeCampaignDir(fs)
+async function locateCharacter(fs, requested, session) {
+  const located = await activeCampaignDir(fs, session)
   if (located === undefined) {
     return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
   }
@@ -328,7 +328,7 @@ async function withCharacterLock(key, work) {
 async function locateAndApply(fs, requested, mutate, options = {}) {
   // Resolve the character to a stem OUTSIDE the lock, purely to build a stable
   // key. This is a directory-level read, not a state read.
-  const located0 = await locateCharacter(fs, requested)
+  const located0 = await locateCharacter(fs, requested, options.session)
   const lockKey = located0.error !== undefined
     // Nothing resolved: fall back to the raw request so that a repeated failing
     // call still queues with itself rather than racing on the campaign marker.
@@ -338,7 +338,7 @@ async function locateAndApply(fs, requested, mutate, options = {}) {
   return withCharacterLock(lockKey, async () => {
     // Re-locate INSIDE the lock. Every caller's state read happens here, one at
     // a time, so each one sees the previous write's result.
-    const located = await locateCharacter(fs, requested)
+    const located = await locateCharacter(fs, requested, options.session)
     if (located.error !== undefined) return { error: located.error }
 
     const describe = options.describe
@@ -438,11 +438,12 @@ export function buildTools(ctx) {
         // Each write carries the calling session's policy. Omitting it is what
         // made every write refusable while reads stayed healthy.
         sandboxPolicy: policyFor(exec),
+        session: sessionOf(ctx, exec),
         describe: (state, located) => describeTrack(located.name, changes, state, args.reason),
       })
       // Fired AFTER the write, so a refused write reports its own error first
       // and the advisory follows on the next call rather than masking it.
-      void runWriteSelfCheck(ctx, { fs, policy: policyFor(exec) }).catch(() => {})
+      void runWriteSelfCheck(ctx, { fs, policy: policyFor(exec), session: sessionOf(ctx, exec) }).catch(() => {})
 
       if (outcome.error !== undefined) return outcome.error
       return withProbeAdvisory(outcome.result.text)
@@ -503,6 +504,7 @@ export function buildTools(ctx) {
       }, {
         key: args.key,
         sandboxPolicy: policyFor(exec),
+        session: sessionOf(ctx, exec),
         describe: (state) => {
           const what = args.reason !== undefined ? ` (${args.reason})` : ''
           return `Spent ${formatCurrencyShort(report.cost)}${what}. `
@@ -562,6 +564,7 @@ export function buildTools(ctx) {
       }, {
         key: args.key,
         sandboxPolicy: policyFor(exec),
+        session: sessionOf(ctx, exec),
         describe: (state, located) => {
           const what = args.reason !== undefined ? ` (${args.reason})` : ''
           const delta = report.amount >= 0 ? `+${report.amount}` : String(report.amount)

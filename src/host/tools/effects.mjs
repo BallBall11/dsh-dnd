@@ -172,7 +172,7 @@ import { activeCampaignDir } from './shared.mjs'
 import { readCharacter, writeCharacter, listCharacters } from './state-io.mjs'
 import { normalizeState } from './state-schema.mjs'
 import { readCalendar } from './clock.mjs'
-import { writePolicyFor } from './session-scope.mjs'
+import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
 
 export const name = 'dnd-effects'
@@ -690,8 +690,8 @@ export async function withEncounterLock(key, work) {
  * @param requested - the caller's `character` argument.
  * @returns `{ dir, campaign, name }` or `{ error }`.
  */
-async function locateCharacter(fs, requested) {
-  const located = await activeCampaignDir(fs)
+async function locateCharacter(fs, requested, session) {
+  const located = await activeCampaignDir(fs, session)
   if (located === undefined) {
     return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
   }
@@ -887,10 +887,10 @@ export function buildTools(ctx) {
    * spellings of ONE character, and keying on the raw argument gave them three
    * independent chains that still lost updates.
    */
-  async function withLockedCharacter(fs, requested, work, policy) {
+  async function withLockedCharacter(fs, requested, work, policy, exec) {
     // Resolution for the lock key happens OUTSIDE the lock: it reads only the
     // campaign marker and the directory listing, never a character's state.
-    const located0 = await locateCharacter(fs, requested)
+    const located0 = await locateCharacter(fs, requested, sessionOf(ctx, exec))
     const raw = requested === undefined || requested === null ? '' : String(requested)
     const lockKey = located0.error !== undefined
       ? ('unresolved/' + raw).toLowerCase()
@@ -899,7 +899,7 @@ export function buildTools(ctx) {
     return withEncounterLock(lockKey, async () => {
       // Re-locate INSIDE the lock: every caller's read happens here, one at a
       // time, so each one sees the previous write's result.
-      const located = await locateCharacter(fs, requested)
+      const located = await locateCharacter(fs, requested, sessionOf(ctx, exec))
       if (located.error !== undefined) return located.error
       const loaded = await loadSections(fs, located)
       return work(located, loaded, policy)
@@ -983,7 +983,7 @@ export function buildTools(ctx) {
         if (elapsedSeconds(args) <= 0) {
           return 'dnd_effect tick needs an elapsed time: rounds, minutes or hours (e.g. rounds 1, or minutes 10). Nothing was written.'
         }
-        return tickAction(fs, args, policyFor(exec))
+        return tickAction(fs, args, policyFor(exec), exec)
       }
 
       if (action === 'start' || action === 'end') {
@@ -1070,7 +1070,7 @@ export function buildTools(ctx) {
         const lines = [located.name + ': ' + gone.name + ' ends' + (gone.concentration ? ' (concentration ends with it)' : '') + '.']
         lines.push(effectSummary(effects, concentration))
         return lines.join('\n')
-      }, policy)
+      }, policy, exec)
     },
   }
 
@@ -1083,7 +1083,7 @@ export function buildTools(ctx) {
    * and requiring one call per character is precisely the bookkeeping this tool
    * exists to remove.
    */
-  async function tickAction(fs, args, policy) {
+  async function tickAction(fs, args, policy, exec) {
     const key = requestKey(args)
     const named = args.character !== undefined && args.character !== null && String(args.character).trim() !== ''
     if (named) {
@@ -1098,14 +1098,14 @@ export function buildTools(ctx) {
           ...(key === null ? {} : { appliedKeys: withKeyRecorded(loaded.appliedKeys, key) }),
         }, policy)
         return renderTick(located.name, result, breakNow)
-      }, policy)
+      }, policy, exec)
     }
 
     // Whole-party tick. Only characters that already have an encounter file with
     // effects take part: creating one here would mean a party tick materializes
     // an encounter for every character in the campaign, including ones who never
     // rolled anything.
-    const found = await activeCampaignDir(fs)
+    const found = await activeCampaignDir(fs, sessionOf(ctx, exec))
     if (found === undefined) {
       return 'No active campaign. Load one with /dm:dnd load <campaign> first.'
     }
@@ -1311,7 +1311,7 @@ export function buildTools(ctx) {
           }
         }
         return lines.join('\n')
-      }, policy)
+      }, policy, exec)
     },
   }
 
@@ -1397,7 +1397,7 @@ export function buildTools(ctx) {
         }
         if (!mirrored.mirrored) lines.push('  (sheet mirror not updated: ' + mirrored.reason + ')')
         return lines.join('\n')
-      }, policy)
+      }, policy, exec)
     },
   }
 
