@@ -18,10 +18,15 @@ const styleTags = []
 
 /** Minimal DOM surface: enough for style injection and the slot registry. */
 const document = {
-  head: { appendChild: (el) => { styleTags.push(el) } },
+  // The head may also receive non-style elements (the panel injects a
+  // viewport meta when missing); only <style> tags count here.
+  head: { appendChild: (el) => { if (el.tagName === 'style') styleTags.push(el) } },
   querySelector: () => null,
   createElement: (tag) => {
-    const el = { tagName: tag, dataset: {}, textContent: '' }
+    const el = { tagName: tag, dataset: {}, textContent: '', attributes: {} }
+    // The panel injects a viewport meta when the host page lacks one, so the
+    // stub must answer setAttribute like a real element.
+    el.setAttribute = (name, value) => { el.attributes[name] = value }
     return el
   },
 }

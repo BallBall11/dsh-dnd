@@ -41,6 +41,12 @@ const DND_API = '/dnd'
 // FIRST cell of every row; wrapped rows gain a top hairline so cards still
 // read as separate columns. NOTE: no block comments inside the CSS string —
 // the build strips comments outside strings only, so one would ship.
+// Desktop keeps FIXED column widths (264px): paired with the overlay's
+// width:max-content the panel hugs the right edge at its natural size. With
+// 1fr columns max-content sizing would expand every column to the content's
+// longest line, the overlay would hit its max-width cap and span the screen.
+// The 1fr forms exist only inside the media queries, where the overlay is
+// viewport-anchored anyway.
 const CSS = `
 .dnd-action{display:inline-flex;align-items:center;gap:6px;background:none;border:none;
   color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;padding:0 8px;border-radius:8px;
@@ -80,7 +86,7 @@ const CSS = `
 .dnd-slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .dnd-slot{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:3px 8px;font-size:12px}
 .dnd-slot i{font-style:normal;color:var(--dsw-alias-label-secondary)}
-.dnd-party{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
+.dnd-party{display:grid;grid-template-columns:repeat(4,minmax(0,264px));align-items:start}
 .dnd-party>*{padding:0 9px;min-width:0;overflow-wrap:anywhere}
 .dnd-party>*+*{border-left:1px solid var(--dsw-alias-border-l1)}
 .dnd-party>*:nth-child(4n+1){border-left:none;padding-left:0}
@@ -96,12 +102,12 @@ const CSS = `
   .dnd-party>*:nth-child(2n+1){border-left:none;padding-left:0}
   .dnd-party>*:nth-child(2n){padding-left:9px}
   .dnd-party>*:nth-child(n+3){border-top:1px solid var(--dsw-alias-border-l1);padding-top:10px}
+  .dnd-overlay{left:12px;right:12px;width:auto;min-width:0;top:64px;bottom:12px;padding:12px}
 }
 @media (max-width:560px){
   .dnd-party{grid-template-columns:minmax(0,1fr);row-gap:14px}
   .dnd-party>*{border-left:none;padding:0}
   .dnd-party>*+*{border-top:1px solid var(--dsw-alias-border-l1);padding-top:10px}
-  .dnd-overlay{left:12px;right:12px;width:auto;min-width:0;top:64px;bottom:12px;padding:12px}
   .dnd-grid{grid-template-columns:repeat(3,1fr)}
 }
 .dnd-tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11px;
@@ -144,6 +150,16 @@ const CSS = `
 /** Inject the stylesheet once, keyed so a reload does not stack duplicates. */
 function ensureStyle() {
   if (typeof document === 'undefined') return undefined
+  // Without a viewport meta the phone renders the page at a ~980px virtual
+  // width and every media query below is dead on arrival — the panel would
+  // sit flush against the left edge of a shrunken desktop layout. If the
+  // host page lacks one, add it; an existing one is left untouched.
+  if (document.querySelector('meta[name="viewport"]') === null) {
+    const meta = document.createElement('meta')
+    meta.setAttribute('name', 'viewport')
+    meta.setAttribute('content', 'width=device-width, initial-scale=1')
+    document.head.appendChild(meta)
+  }
   const existing = document.querySelector('style[data-plugin="dsh-dnd"]')
   if (existing !== null && existing !== undefined) return existing
   const tag = document.createElement('style')
