@@ -51,6 +51,11 @@ const CSS = `
   font-family:inherit;font-size:13px;background:var(--dsw-alias-bg-layer-1);
   border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);padding:14px}
 .dnd-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.dnd-headright{display:flex;align-items:center;gap:6px}
+.dnd-close{background:none;border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary);
+  cursor:pointer;font:inherit;font-size:16px;line-height:1;width:26px;height:26px;border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;padding:0}
+.dnd-close:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}
 .dnd-name{font-size:15px;font-weight:600}
 .dnd-sub{color:var(--dsw-alias-label-secondary);font-size:12px;margin-top:2px}
 .dnd-muted{color:var(--dsw-alias-label-secondary);font-size:12px;margin-top:6px}
@@ -611,7 +616,17 @@ function Overlay() {
   },
   React.createElement('div', { className: 'dnd-head' },
     React.createElement('div', { className: 'dnd-name' }, '角色'),
-    campaign !== null ? React.createElement('span', { className: 'dnd-tag' }, campaign) : null),
+    React.createElement('div', { className: 'dnd-headright' },
+      campaign !== null ? React.createElement('span', { className: 'dnd-tag' }, campaign) : null,
+      // The overlay spans the screen on mobile and can cover the toggle
+      // button entirely - a close affordance inside the panel is required.
+      React.createElement('button', {
+        type: 'button',
+        className: 'dnd-close',
+        title: '关闭',
+        'aria-label': '关闭面板',
+        onClick: () => setOpen(false),
+      }, '×'))),
   React.createElement(Body, { result, meta }))
 }
 
