@@ -24,6 +24,19 @@
   "Lightning": "闪电", "Necrotic": "死灵", "Piercing": "穿刺", "Poison": "毒素",
   "Psychic": "心灵", "Radiant": "光耀", "Slashing": "挥砍", "Thunder": "雷鸣"
  },
+ "classNames": {
+  "Barbarian": "野蛮人", "Bard": "吟游诗人", "Cleric": "牧师", "Druid": "德鲁伊",
+  "Fighter": "战士", "Monk": "武僧", "Paladin": "圣武士", "Ranger": "游侠",
+  "Rogue": "游荡者", "Sorcerer": "术士", "Warlock": "邪术师", "Wizard": "法师"
+ },
+ "races": {
+  "Dragonborn": "龙裔", "Dwarf": "矮人", "Elf": "精灵", "Gnome": "侏儒",
+  "Goliath": "歌利亚", "Halfling": "半身人", "Human": "人类", "Orc": "兽人",
+  "Tiefling": "提夫林", "Human (Standard)": "人类", "High Elf (Elf)": "高等精灵",
+  "Hill Dwarf (Dwarf)": "丘矮人", "Wood Elf (Elf)": "木精灵", "Drow (Elf)": "卓尔精灵",
+  "Rock Gnome (Gnome)": "岩侏儒", "Lightfoot (Halfling)": "轻足半身人",
+  "Forest Gnome (Gnome)": "森林侏儒", "Stout (Halfling)": "健壮半身人"
+ },
  "schools": {
   "Abjuration": "防护", "Conjuration": "咒法", "Divination": "预言", "Enchantment": "惑控",
   "Evocation": "塑能", "Illusion": "幻术", "Necromancy": "死灵", "Transmutation": "变化"

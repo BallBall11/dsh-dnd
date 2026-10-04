@@ -40,7 +40,8 @@ const CSS = `
   color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;padding:0 8px;border-radius:8px;
   white-space:nowrap;height:32px;line-height:1;box-sizing:border-box}
 .dnd-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dnd-overlay{position:fixed;right:16px;top:72px;width:max-content;min-width:300px;max-width:calc(100vw - 32px);max-height:calc(100vh - 96px);
+.dnd-overlay{position:fixed;right:16px;top:72px;width:max-content;min-width:300px;max-width:calc(100vw - 32px);
+  height:calc(100vh - 96px);
   overflow-y:auto;z-index:50;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);
   font-family:inherit;font-size:13px;background:var(--dsw-alias-bg-layer-1);
   border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);padding:14px}
@@ -61,7 +62,7 @@ const CSS = `
 .dnd-cell span{font-size:10px;color:var(--dsw-alias-label-secondary);letter-spacing:.04em}
 .dnd-row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}
 .dnd-row span:last-child{font-variant-numeric:tabular-nums}
-.dnd-pro{color:var(--dsw-alias-state-success-primary);font-weight:600}
+.dnd-pro{color:var(--dsw-alias-label-primary)}
 .dnd-err{margin-top:8px;font-size:12px;padding:6px 8px;border-radius:8px;
   background:var(--dsw-alias-bg-layer-2);border-left:3px solid var(--dsw-alias-state-error-primary)}
 .dnd-warn{margin-top:8px;font-size:12px;padding:6px 8px;border-radius:8px;
@@ -459,7 +460,12 @@ function Character({ character, meta, ruleset }) {
   }
   const identity = st.identity ?? {}
   const combat = st.combat ?? {}
-  const title = [identity.race ? String(identity.race).split(' (')[0] : null, identity.class]
+  // Race/class render in Chinese where the curated map knows them ("Bard" ->
+  // 吟游诗人), keeping the English beside when the card title shortened them.
+  const raceRaw = identity.race !== null && identity.race !== undefined ? String(identity.race).split(' (')[0] : null
+  const raceZh = raceRaw !== null ? zh(meta, 'races', raceRaw) : null
+  const classZh = identity.class !== null && identity.class !== undefined ? zh(meta, 'classNames', identity.class) : null
+  const title = [raceZh, classZh]
     .filter(Boolean).join(' ')
   const proficiency = Object.entries(st.skills ?? {})
     .filter(([, v]) => v.proficient)

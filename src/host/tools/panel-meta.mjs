@@ -135,6 +135,7 @@ export async function buildPanelMeta(fs) {
         damageTypes: i18n.damageTypes ?? {}, schools: i18n.schools ?? {},
         weaponProperties: i18n.weaponProperties ?? {}, mastery: i18n.mastery ?? {}, features: i18n.features ?? {},
         gear: i18n.gear ?? {}, armorNames: i18n.armor ?? {},
+        classNames: i18n.classNames ?? {}, races: i18n.races ?? {},
         // Name-only fallbacks for equipment the datasets do not index
         // (an instrument stashed in weapons, a small knife in gear).
         weaponNames: i18n.weapons ?? {},
