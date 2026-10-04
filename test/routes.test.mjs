@@ -261,7 +261,7 @@ await test('GET /dnd/meta serves the display index the panel renders against', a
   assert.equal(meta.weapons['Longsword'].damage, '1d8 挥砍')
   assert.deepEqual(meta.weapons['Dagger'].properties, ['灵巧', '轻型', '投掷'])
   assert.equal(meta.weapons['Longsword'].mastery, 'Sap')
-  assert.equal(meta.armor['Chain Mail'].zh, '锁甲')
+  assert.equal(meta.armor['Chain Mail'].zh, '链甲')
   assert.equal(meta.armor['Chain Mail'].ac, 'AC 16 + 敏捷', 'the AC formula is translated (SRD 5.1 lists Chain Mail with + DEX)')
   assert.equal(meta.abilities.STR, '力量')
   assert.equal(meta.gear['Backpack'], '背包')

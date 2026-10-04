@@ -21,7 +21,7 @@ original content; each file records its own upstream in `_meta`.
 | `srd-2014-fulltext.json` | 2014 (SRD 5.1, full text) | [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) (`5esrd.json`, complete copy) | OGL 1.0a |
 | `supplemental.json` | — | hand-curated additions to the structured datasets | OGL 1.0a |
 | `srd-2024-renames.json` | 2014→2024 rename map | [Converting to SRD 5.2.1](https://media.dndbeyond.com/compendium-images/srd/guide/converting-to-srd-5.2.1.pdf) (Wizards of the Coast) | CC-BY-4.0 |
-| `i18n-zh.json` | — | hand-curated EN→CN display map (abilities, skills, conditions, weapons, features, spells) | original work, no game text |
+| `i18n-zh.json` | — | hand-curated EN→CN display map, **calibrated against the [5etools-cn](https://github.com/tjliqy/5etools-cn/tree/cn2.0) terminology table** (site-curated glossary, ~650 spells + abilities/skills/conditions/weapons/features) | CN translations follow 5etools-cn's community glossary; game text remains OGL/CC-BY-4.0 |
 
 What `dnd_srd_lookup` reads: with `ruleset: "2014"` (the default), `class`
 queries and bare class names are answered from `srd-2014-fulltext.json` and

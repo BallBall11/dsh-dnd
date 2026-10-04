@@ -6,6 +6,19 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The panel's Chinese terminology is calibrated against 5etools-cn.** The
+  EN→CN display map now follows the community site's own curated glossary
+  (tjliqy/5etools-cn @ cn2.0, 47829 terms), resolved per category: spells
+  from its `spell` table, weapon mastery from `itemMastery`, damage types
+  from `variantrule` (强酸/寒冷/暗蚀), and the weapon-property set guarded
+  against the glossary's bulk-category "Light"→光线 artifact. ~370 names
+  changed (e.g. 引导神力, 荒野形态, 恶言相加, 魔契师, 顺劈→横扫), and the
+  spell map grew to ~650 entries via the glossary's spell table.
+  `scripts/calibrate-i18n.mjs` is the repeatable calibration pass; the
+  glossary itself is not vendored.
+
 ### Added
 
 - **The panel renders a full character sheet, in Chinese.** Three gaps closed
