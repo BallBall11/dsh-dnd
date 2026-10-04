@@ -365,11 +365,28 @@ function Equipment({ characterId, st, meta }) {
   if (weaponNames.length === 0 && armorNames.length === 0 && gearNames.length === 0) return null
   const weaponMeta = (name) => meta !== null && meta !== undefined ? (meta.weapons ?? {})[name] : undefined
   const armorMeta = (name) => meta !== null && meta !== undefined ? (meta.armor ?? {})[name] : undefined
+  // Equipment the datasets do not index (an instrument stashed under weapons,
+  // a small knife) still gets its Chinese name from the curated name maps.
+  const weaponName = (name) => {
+    const w = weaponMeta(name)
+    if (w !== undefined && w.zh) return w.zh
+    const byWeapon = zh(meta, 'weaponNames', name)
+    if (byWeapon !== name) return byWeapon
+    const byGear = zh(meta, 'gear', name)
+    if (byGear !== name) return byGear
+    return name
+  }
+  const armorName = (name) => {
+    const a = armorMeta(name)
+    if (a !== undefined && a.zh) return a.zh
+    const byArmor = zh(meta, 'armorNames', name)
+    return byArmor !== name ? byArmor : name
+  }
   const qty = (map, name) => { const n = map[name]; return n !== undefined && n !== 1 ? ' ×' + n : '' }
   return React.createElement(Section, { characterId, title: '装备', count: weaponNames.length + armorNames.length, defaultOpen: true },
     ...weaponNames.map((name) => {
       const w = weaponMeta(name)
-      const displayName = w !== undefined && w.zh ? w.zh : name
+      const displayName = weaponName(name)
       return React.createElement(React.Fragment, { key: 'w' + name },
         React.createElement('div', { className: 'dnd-eq' },
           React.createElement('span', null,
@@ -387,7 +404,7 @@ function Equipment({ characterId, st, meta }) {
     }),
     ...armorNames.map((name) => {
       const a = armorMeta(name)
-      const displayName = a !== undefined && a.zh ? a.zh : name
+      const displayName = armorName(name)
       return React.createElement('div', { key: 'a' + name, className: 'dnd-eq' },
         React.createElement('span', null,
           React.createElement('b', null, displayName + qty(equipment.armour, name)),

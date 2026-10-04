@@ -140,7 +140,22 @@
   "Heightened Focus": "高度专注", "Faithful Steed": "忠诚信使", "Abjure Foes": "叱退强敌",
   "Restoring Touch": "复元之触", "Aura Expansion": "灵气扩展", "Deft Explorer": "机敏探索者",
   "Roving": "漫游", "Tireless": "不懈", "Relentless Hunter": "不屈猎人",
-  "Nature's Veil": "自然帷幕", "Precise Hunter": "精准猎人", "Epic Boon": "史诗恩泽"
+  "Nature's Veil": "自然帷幕", "Precise Hunter": "精准猎人", "Epic Boon": "史诗恩泽",
+  "Bard Subclass": "吟游诗人子职业", "Fighter Subclass": "战士子职业",
+  "Cleric Subclass": "牧师子职业", "Druid Subclass": "德鲁伊子职业",
+  "Sorcerer Subclass": "术士子职业", "Warlock Subclass": "邪术师子职业",
+  "Wizard Subclass": "法师子职业", "Paladin Subclass": "圣武士子职业",
+  "Monk Subclass": "武僧子职业", "Barbarian Subclass": "野蛮人子职业",
+  "Ranger Subclass": "游侠子职业", "Rogue Subclass": "游荡者子职业",
+  "Unarmored Movement": "无甲移速", "Acrobatic Movement": "杂技身法",
+  "Self-Restoration": "自我复原", "Empowered Strikes": "赋能打击",
+  "Perfect Body": "完美之躯", "Wholeness of Body": "完满之身",
+  "Open Hand Technique": "开手技法", "Warrior of the Open Hand": "开手武者",
+  "Deflect Missiles": "拨挡飞矢", "Ki-Empowered Strikes": "气能打击",
+  "Feral Instinct": "野性直觉", "Brutal Strike": "残忍打击",
+  "Improved Brutal Strike": "强化残忍打击", "Cutting Words": "刻薄之言",
+  "Magical Discoveries": "魔法发现", "Peerless Skill": "无匹技艺",
+  "Superior Critical": "卓越重击", "Eldritch Invocation": "魔能祈唤"
  },
  "spells": {
   "Acid Splash": "酸液飞溅", "Blade Ward": "剑刃防护", "Chill Touch": "寒冰触碰",

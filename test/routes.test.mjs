@@ -263,8 +263,8 @@ await test('GET /dnd/meta serves the display index the panel renders against', a
   assert.equal(meta.weapons['Longsword'].mastery, 'Sap')
   assert.equal(meta.armor['Chain Mail'].zh, '锁甲')
   assert.equal(meta.armor['Chain Mail'].ac, 'AC 16 + 敏捷', 'the AC formula is translated (SRD 5.1 lists Chain Mail with + DEX)')
-  assert.equal(meta.i18n.abilities.STR, '力量')
-  assert.equal(meta.i18n.gear['Backpack'], '背包')
+  assert.equal(meta.abilities.STR, '力量')
+  assert.equal(meta.gear['Backpack'], '背包')
 })
 
 await test('an unmigrated character reports needsMigration', async () => {
