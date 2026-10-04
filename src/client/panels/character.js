@@ -191,8 +191,16 @@ function useMeta() {
 /** zh term for an EN key, falling back to the key itself. */
 function zh(meta, map, key) {
   if (meta !== null && meta !== undefined && key !== null && key !== undefined) {
-    const hit = (meta[map] ?? {})[key]
+    const table = meta[map] ?? {}
+    const hit = table[key]
     if (typeof hit === 'string' && hit !== '') return hit
+    // Skill keys arrive in two shapes: sheet-parse stores CamelCase
+    // ("SleightOfHand"), the map keys on display names ("Sleight of Hand").
+    const spaced = String(key).replace(/([a-z])([A-Z])/g, '$1 $2')
+    if (spaced !== key) {
+      const retry = table[spaced]
+      if (typeof retry === 'string' && retry !== '') return retry
+    }
   }
   return key
 }
@@ -321,40 +329,40 @@ function Equipment({ st, meta }) {
   if (weaponNames.length === 0 && armorNames.length === 0 && gearNames.length === 0) return null
   const weaponMeta = (name) => meta !== null && meta !== undefined ? (meta.weapons ?? {})[name] : undefined
   const armorMeta = (name) => meta !== null && meta !== undefined ? (meta.armor ?? {})[name] : undefined
+  const qty = (map, name) => { const n = map[name]; return n !== undefined && n !== 1 ? ' ×' + n : '' }
   return React.createElement('div', null,
     React.createElement('div', { className: 'dnd-sec' }, '装备'),
     ...weaponNames.map((name) => {
       const w = weaponMeta(name)
       const displayName = w !== undefined && w.zh ? w.zh : name
-      return React.createElement('div', { key: 'w' + name, className: 'dnd-eq' },
-        React.createElement('span', null,
-          React.createElement('b', null, displayName),
-          displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
-        React.createElement('span', { className: 'meta' },
-          w !== undefined && w.damage ? w.damage : '—'))
+      return React.createElement(React.Fragment, { key: 'w' + name },
+        React.createElement('div', { className: 'dnd-eq' },
+          React.createElement('span', null,
+            React.createElement('b', null, displayName + qty(equipment.weapons, name)),
+            displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
+          React.createElement('span', { className: 'meta' },
+            w !== undefined && w.damage ? w.damage : '—')),
+        w !== undefined && (w.properties.length > 0 || w.mastery)
+          ? React.createElement('div', { className: 'dnd-levelchips' },
+            ...w.properties.map((p, i) => React.createElement('span', { key: i, className: 'dnd-chip' }, p)),
+            w.mastery
+              ? React.createElement('span', { className: 'dnd-chip mastery', title: '武器精通（2024）' }, '精通·' + zh(meta, 'mastery', w.mastery))
+              : null)
+          : null)
     }),
     ...armorNames.map((name) => {
       const a = armorMeta(name)
       const displayName = a !== undefined && a.zh ? a.zh : name
       return React.createElement('div', { key: 'a' + name, className: 'dnd-eq' },
         React.createElement('span', null,
-          React.createElement('b', null, displayName),
+          React.createElement('b', null, displayName + qty(equipment.armour, name)),
           displayName !== name ? React.createElement('span', { className: 'en' }, name) : null),
         React.createElement('span', { className: 'meta' }, a !== undefined && a.ac ? a.ac : ''))
     }),
-    ...weaponNames.flatMap((name) => {
-      const w = weaponMeta(name)
-      if (w === undefined || (w.properties.length === 0 && !w.mastery)) return []
-      const bits = w.properties.map((p) => React.createElement('span', { key: p, className: 'dnd-chip' }, zh(meta, 'weaponProperties', p)))
-      if (w.mastery) {
-        bits.push(React.createElement('span', { key: 'mastery', className: 'dnd-chip mastery', title: '武器精通（2024）' },
-          '精通·' + zh(meta, 'mastery', w.mastery)))
-      }
-      return [React.createElement('div', { key: 'p' + name, className: 'dnd-levelchips' }, ...bits)]
-    }),
     gearNames.length > 0
       ? React.createElement('div', { className: 'dnd-levelchips' },
-        ...gearNames.map((g) => React.createElement('span', { key: g, className: 'dnd-chip' }, g)))
+        ...gearNames.map((g) => React.createElement('span', { key: g, className: 'dnd-chip' },
+          zh(meta, 'gear', g) + qty(equipment.gear, g))))
       : null)
 }
 

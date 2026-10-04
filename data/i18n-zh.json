@@ -52,6 +52,27 @@
   "Half Plate Armor": "半身板甲", "Ring Mail": "环甲", "Chain Mail": "锁甲",
   "Splint Armor": "条板甲", "Plate Armor": "板甲", "Shield": "盾牌"
  },
+ "gear": {
+  "Backpack": "背包", "Bedroll": "铺盖卷", "Waterskin": "水袋", "Rations": "口粮",
+  "Candle": "蜡烛", "Tinderbox": "火绒盒", "Robe": "长袍", "Lute": "鲁特琴",
+  "Thieves' Tools": "盗贼工具", "Disguise Kit": "伪装工具", "Small Knife": "小刀",
+  "Flask": "细颈瓶", "Torch": "火把", "Lantern": "提灯", "Oil (flask)": "灯油",
+  "Rope": "绳索", "Crowbar": "撬棍", "Hammer": "铁锤", "Piton": "岩钉",
+  "Holy Symbol": "圣徽", "Component Pouch": "法器包", "Spellbook": "法术书",
+  "Grappling Hook": "抓钩", "Healer's Kit": "医疗工具", "Gaming Set": "赌具",
+  "Musical Instrument": "乐器", "Artisan's Tools": "工匠工具", "Navigator's Tools": "航海工具",
+  "Map": "地图", "String": "细绳", "Net": "捕网", "Parchment": "羊皮纸",
+  "Book": "书籍", "Ink": "墨水", "Ink Pen": "墨水笔", "Sealing Wax": "封蜡",
+  "Traveler's Clothes": "旅装", "Fine Clothes": "华服", "Common Clothes": "便服",
+  "Arrows": "箭", "Quiver": "箭袋", "Bolts": "弩矢", "Sling Bullets": "弹丸",
+  "Crossbow Bolt Case": "弩矢匣", "Signal Whistle": "信号哨", "Soap": "肥皂",
+  "Mess Kit": "餐具组", "Shovel": "铁锹", "Bucket": "水桶", "Fishing Tackle": "渔具",
+  "Two-Person Tent": "双人帐篷", "Mirror": "镜子", "Chain": "锁链", "Manacles": "镣铐",
+  "Bell": "铃铛", "Block and Tackle": "滑轮组", "Caltrops": "铁蒺藜", "Chalk": "粉笔",
+  "Chest": "箱子", "Crossbow Bolt": "弩矢", "Glass Bottle": "玻璃瓶", "Jug": "陶罐",
+  "Pitcher": "水壶", "Potion of Healing": "治疗药水", "Powder": "粉末",
+  "Spyglass": "单筒望远镜", "Vial": "小瓶", "Hourglass": "沙漏", "Magnifying Glass": "放大镜"
+ },
  "weaponMasteryByWeapon": {
   "Dagger": "Nick", "Handaxe": "Nick", "Light Hammer": "Nick", "Scimitar": "Nick", "Shortsword": "Nick", "Sickle": "Nick",
   "Javelin": "Slow", "Dart": "Slow", "Sling": "Slow", "Blowgun": "Slow", "Light Crossbow": "Slow", "Shortbow": "Slow", "Longbow": "Slow", "Whip": "Slow", "Musket": "Slow", "Pistol": "Slow",
