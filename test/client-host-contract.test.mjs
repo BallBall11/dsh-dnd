@@ -110,6 +110,21 @@ test('the client bundle still declares no ESM syntax', () => {
   assert.ok(!/^\s*import\s/m.test(panel), 'no import statements in a factory body')
 })
 
+test('the meta index flows through the meta prop, never off the transport result', () => {
+  // The shipped defect: Body received `meta` from Overlay's useMeta fetch but
+  // read the transport result for it — a field the /dnd/characters payload
+  // does not carry — so every card silently rendered without Chinese names or
+  // combat lines. The symptom was invisible: no error, just an English panel.
+  // Comments are stripped first, as in the host.call assertion above, so this
+  // file's own prose cannot trip the match.
+  const code = panel
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+  assert.ok(!/result\.meta/.test(code),
+    'meta comes from the useMeta prop, not from the /dnd/characters response')
+  assert.match(code, /Character, \{ character: c, meta,/)
+})
+
 console.log('')
 if (failures > 0) {
   console.error(`client-host-contract.test.mjs: ${failures} failure(s)`)

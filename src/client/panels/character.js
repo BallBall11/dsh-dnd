@@ -530,8 +530,12 @@ function Body({ result, meta }) {
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'dnd-party' },
+      // `meta` arrives as a PROP from Overlay (useMeta's fetch), never on the
+      // transport result — the earlier version read result.meta, which is
+      // always undefined, so every card silently rendered without its
+      // Chinese names and combat lines.
       ...characters.map((c) => React.createElement('div', { key: c.name },
-        React.createElement(Character, { character: c, meta: result.meta, ruleset: result.body.ruleset ?? '2014' })))),
+        React.createElement(Character, { character: c, meta, ruleset: result.body.ruleset ?? '2014' })))),
     ...warnings.map((w, i) => React.createElement('div', { key: 'gw' + i, className: 'dnd-warn' }, w)))
 }
 
