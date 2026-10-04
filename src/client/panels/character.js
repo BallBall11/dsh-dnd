@@ -40,8 +40,7 @@ const CSS = `
   color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;padding:0 8px;border-radius:8px;
   white-space:nowrap;height:32px;line-height:1;box-sizing:border-box}
 .dnd-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dnd-overlay{position:fixed;right:16px;top:72px;width:max-content;min-width:300px;max-width:calc(100vw - 32px);
-  height:calc(100vh - 96px);
+.dnd-overlay{position:fixed;right:16px;top:72px;bottom:16px;width:max-content;min-width:300px;max-width:calc(100vw - 32px);
   overflow-y:auto;z-index:50;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);
   font-family:inherit;font-size:13px;background:var(--dsw-alias-bg-layer-1);
   border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);padding:14px}
