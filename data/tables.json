@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "source": "house-curated simplification of the DMG's individual-treasure bands: four CR bands with a uniform gold range, instead of nine percentile rows",
+    "license": "house compromise; no SRD text is reproduced here",
+    "rulesets": ["2014", "2024"],
+    "updated": "2026-10-04"
+  },
+  "loot": {
+    "comment": "gp is a [min, max] range rolled uniformly per enemy of that CR band; amounts are what the DM hands out, not a promise",
+    "bands": [
+      { "cr": [0, 4],    "label": "CR 0-4",   "gp": [5, 100] },
+      { "cr": [5, 10],   "label": "CR 5-10",  "gp": [101, 650] },
+      { "cr": [11, 16],  "label": "CR 11-16", "gp": [651, 2600] },
+      { "cr": [17, 30],  "label": "CR 17+",   "gp": [2601, 13000] }
+    ]
+  }
+}
