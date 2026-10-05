@@ -23,3 +23,8 @@ probe-*.mjs
 # "仍属临时产物，收尾时移出仓库或进 .gitignore".)
 browser-verify-*.png
 5e-SRD-*.json
+
+# Agent-tool session state (Serena MCP project index, ZCode workspace), local
+# to the machine and regenerated on demand. Never campaign data, never source.
+.serena/
+.zcode/
