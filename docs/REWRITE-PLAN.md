@@ -466,6 +466,18 @@ body 上限。**本项目一概不做**，理由如下。
 
 **验收**：全部写入测试在 throwaway 战役；**真实 `morgansfort/alice.md` 保持不动**。
 
+### GM 工具缺口轮（✅ 代码完成，2026-10-04）
+
+六项新工具按 `docs/harness/GAP-TOOLS-PLAN.md` 落地：`dnd_rest`（短/长休，
+party 批量）、`dnd_enemy_create`（SRD statblock 整卡生成，内部委托
+`dnd_character_create` 写路径）、`dnd_attack` 的 `target` 伤害落地模式、
+面板敌人分区（`?include=enemies`，真实血量）、`dnd_encounter_difficulty`
++ `dnd_loot`（DMG 方法 + `data/tables.json`）、`dnd_note`（session-log.md
+追加 + 尾部指纹去重）。附带修复：`dnd_track` 的 hp 伤害现在先消耗临时
+生命（`apply-damage.mjs` 共享规则）。`npm run check` 全绿；`verify-client`
+已加入敌人分区的无头渲染断言（`EnemyCard` 构树），宿主真实主题下的视觉
+确认随阶段 4 第一件事（真机重启）一并进行。
+
 ---
 
 ## 7. 验收标准

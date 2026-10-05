@@ -13,13 +13,20 @@
  *   tools/campaign.mjs  dnd_campaign_state dnd_campaign_search dnd_arc_status
  *   tools/sheet.mjs     dnd_character_get
  *   tools/character-create.mjs  dnd_character_create
+ *   tools/enemy-create.mjs  dnd_enemy_create
  *   tools/track.mjs     dnd_track dnd_spend dnd_xp_add
+ *   tools/rest.mjs      dnd_rest
+ *   tools/note.mjs      dnd_note
+ *   tools/levelup.mjs   dnd_level_up
  *   tools/calendar.mjs  dnd_calendar
  *   tools/initiative.mjs  dnd_initiative dnd_initiative_end
  *   tools/effects.mjs   dnd_effect dnd_concentration dnd_death_save
+ *   tools/encounter.mjs dnd_encounter_difficulty dnd_loot
  *   tools/panel.mjs     dnd_panel_status
  *
- * track.mjs is the only family that writes. Everything above it is pure, which
+ * track.mjs owns THE write path (locateAndApply: locks, idempotency, clocks,
+ * diagnosis); rest.mjs and roll.mjs's dnd_attack `target` mode persist through
+ * it rather than writing on their own. The remaining families are pure, which
  * is what lets the write path be reasoned about on its own.
  *
  * The webServer routes that feed the client panel live in routes.mjs. That
@@ -30,14 +37,19 @@
 
 import * as roll from './tools/roll.mjs'
 import * as characterCreate from './tools/character-create.mjs'
+import * as enemyCreate from './tools/enemy-create.mjs'
 import * as panel from './tools/panel.mjs'
 import * as lookup from './tools/lookup.mjs'
 import * as campaign from './tools/campaign.mjs'
 import * as sheet from './tools/sheet.mjs'
 import * as track from './tools/track.mjs'
+import * as rest from './tools/rest.mjs'
 import * as calendar from './tools/calendar.mjs'
+import * as note from './tools/note.mjs'
+import * as levelup from './tools/levelup.mjs'
 import * as initiative from './tools/initiative.mjs'
 import * as effects from './tools/effects.mjs'
+import * as encounter from './tools/encounter.mjs'
 import { mountRoutes } from './routes.mjs'
 import { createProbeState, setWriteProbeState } from './tools/write-probe.mjs'
 
@@ -50,7 +62,7 @@ import { createProbeState, setWriteProbeState } from './tools/write-probe.mjs'
  * change that was entirely intended. Deriving the number from this list keeps
  * "every family registered" as the actual invariant under test.
  */
-export const FAMILIES = [roll, lookup, campaign, sheet, characterCreate, track, calendar, initiative, effects, panel]
+export const FAMILIES = [roll, lookup, campaign, sheet, characterCreate, enemyCreate, track, rest, note, levelup, calendar, initiative, effects, encounter, panel]
 
 export const name = 'dnd-host'
 

@@ -6,7 +6,52 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ## [Unreleased]
 
+### Added
+
+- **Six GM tool gaps closed** (plan: `docs/harness/GAP-TOOLS-PLAN.md`), aimed
+  at an agent that plays the DM end to end:
+  - `dnd_rest` — a short or long rest settled in one call, for one character
+    or the whole party (`party: true`). Hit Dice are rolled by the tool with
+    per-die detail; long-rest healing follows the campaign ruleset (2014 half,
+    2024 full); spell slots, HD recovery and death saves reset together.
+    Conditions are reported, never removed; timed effects are left to
+    `dnd_effect` (cross-store, not atomic). Multi-die-type (multiclass) HD is
+    refused in v1 rather than approximated.
+  - `dnd_enemy_create` — hostile cards straight from an SRD statblock:
+    `fromSrd` + `count` writes Prefix-1..N with accurate AC/HP/scores/CR, the
+    attack prose landing verbatim in the narrative. Shares the character
+    write path and `kind: 'enemy'` tag; only the tool surface is separate.
+  - Enemy section in the panel: `GET /dnd/characters?include=enemies` adds
+    hostile cards with REAL hp, AC and live conditions (the videogame view
+    the players plan with); the default response is unchanged.
+  - `dnd_attack` gained `target`: on a hit the rolled damage LANDS through
+    the shared write path (one call = roll + blood), with `damageType`,
+    `resistance` and `vulnerability`; an enemy at 0 HP is marked dead.
+  - `dnd_encounter_difficulty` — the DMG method (threshold sums + monster
+    count multiplier) rated 简单/中等/困难/致命, party levels read from the
+    campaign's PCs; `dnd_loot` rolls CR-banded coin from the new
+    `data/tables.json` (with `_meta`).
+  - `dnd_note` — dated `loot`/`hook`/`recap`/`freeform` entries appended to
+    the campaign's `session-log.md` under a per-campaign lock, deduplicated
+    by tail fingerprint, searchable through `dnd_campaign_search`; it never
+    touches `state.md`.
+  - `dnd_level_up` — the advancement step `dnd_xp_add` deliberately leaves
+    out. The default call plans from the class table of the campaign's
+    ruleset dataset (HP gain by average or roll, proficiency bonus, full
+    spell-slot totals with expended counts carried over, the level's
+    features) and writes nothing; `confirm: true` applies through the shared
+    write path once XP reaches the threshold (`force: true` is an explicit
+    DM ruling). Ability score improvements and spell preparation are
+    reported as the player's choices, never filled in.
+
 ### Changed
+
+- **Damage consumes temporary HP first.** `dnd_track`'s `hp` damage used to
+  drain `hp.current` directly while temp HP sat unspent — a character
+  silently tougher than the rules allow. Both that path and `dnd_attack`'s
+  new target mode now route through the shared rules in `apply-damage.mjs`.
+- The GM preset's tool roster text covers the new tools and the panel's
+  enemy section.
 
 - **The panel's Chinese terminology is calibrated against 5etools-cn.** The
   EN→CN display map now follows the community site's own curated glossary
