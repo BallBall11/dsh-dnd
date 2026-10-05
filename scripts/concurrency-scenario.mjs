@@ -36,18 +36,39 @@
  *
  * ## Safety
  *
- * Every write lands in `campaigns/stage2-test`. The active-campaign marker is
- * repointed at it for the duration and restored in a `finally`, and the real
- * campaign is hashed before and after.
+ * The scenario is SELF-CONTAINED: it builds a throwaway workspace in the OS
+ * temp dir, points the explicit `DND_ROOT` env at it for the duration, and
+ * scaffolds the campaign inside it — no live campaign is read, repointed, or
+ * hashed, because there is no live campaign in the picture at all. Every fs
+ * method guards its paths against escaping the temp tree, so a leak fails
+ * loudly instead of touching a real campaign.
  */
-import { readFileSync, writeFileSync, statSync, readdirSync, existsSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, statSync, readdirSync, existsSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/track.mjs'
-import { snapshotTree, diffTree } from '../test/support/live-data.mjs'
+import { writeCharacter } from '../src/host/tools/state-io.mjs'
 
 const nodePath = (p) => String(p).replace(/\//g, path.sep)
 const target = (p) => ({ targetKey: String(p).toLowerCase(), displayPath: String(p).replace(/\\/g, '/') })
+
+// ─── the throwaway workspace ─────────────────────────────────────────────────
+const savedRoot = process.env.DND_ROOT
+const tempRoot = mkdtempSync(path.join(tmpdir(), 'dnd-concurrency-')).replace(/\\/g, '/')
+process.env.DND_ROOT = tempRoot
+process.on('exit', () => {
+  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* gone */ }
+})
+
+/** Every fs path must stay inside the temp tree; a leak is a hard failure. */
+function guard(p, method) {
+  const norm = String(p).replace(/\\/g, '/')
+  if (!norm.startsWith(tempRoot)) {
+    throw new Error('LEAK: fs.' + method + '() outside the temp workspace: ' + norm)
+  }
+  return norm
+}
 
 /**
  * The underlying synchronous fs.
@@ -57,18 +78,18 @@ const target = (p) => ({ targetKey: String(p).toLowerCase(), displayPath: String
  * assertions hash.
  */
 const rawFs = {
-  async resolve(p) { return target(p) },
+  async resolve(p) { return target(guard(p, 'resolve')) },
   async stat(t) {
     try {
-      const s = statSync(nodePath(t.displayPath))
+      const s = statSync(nodePath(guard(t.displayPath, 'stat')))
       return { type: s.isDirectory() ? 'directory' : 'file', size: s.size, mtime: s.mtimeMs }
     } catch { return undefined }
   },
-  async readText(t) { return readFileSync(nodePath(t.displayPath), 'utf8') },
-  async writeText(t, text) { writeFileSync(nodePath(t.displayPath), text, 'utf8') },
+  async readText(t) { return readFileSync(nodePath(guard(t.displayPath, 'readText')), 'utf8') },
+  async writeText(t, text) { writeFileSync(nodePath(guard(t.displayPath, 'writeText')), text, 'utf8') },
   async listDir(t) {
-    const base = String(t.displayPath).replace(/\/$/, '')
-    return readdirSync(nodePath(t.displayPath), { withFileTypes: true }).map((e) => ({
+    const base = String(guard(t.displayPath, 'listDir')).replace(/\/$/, '')
+    return readdirSync(nodePath(base), { withFileTypes: true }).map((e) => ({
       name: e.name, target: target(`${base}/${e.name}`),
       type: e.isDirectory() ? 'directory' : 'file',
     }))
@@ -92,14 +113,54 @@ const fs = {
   async listDir(t) { fsTouched.push('list'); await yieldTick(); return rawFs.listDir(t) },
 }
 
-const ROOT = 'D:/DND'
+const ROOT = tempRoot
 const MARKER = `${ROOT}/.runtime/active-campaign.json`
 const CAMPAIGN = `${ROOT}/campaigns/stage2-test`
 const CHAR_DIR = `${CAMPAIGN}/characters`
 const STATE = `${CHAR_DIR}/alice.state.json`
 const SHEET = `${CHAR_DIR}/alice.md`
-const REAL = `${ROOT}/campaigns/morgansfort/characters/alice.md`
-const REAL_STATE = `${ROOT}/campaigns/morgansfort/characters/alice.state.json`
+
+mkdirSync(nodePath(CHAR_DIR), { recursive: true })
+mkdirSync(nodePath(`${ROOT}/.runtime`), { recursive: true })
+writeFileSync(nodePath(MARKER), JSON.stringify({ name: 'stage2-test' }), 'utf8')
+writeFileSync(nodePath(`${CAMPAIGN}/calendar.json`), JSON.stringify({
+  day: 2, month: 3, year: 1247, hour: 8, month_length: 30,
+  months: ['Frostride', 'Thawmonth', 'Seedfall', 'Rainmonth', 'Bloomtide', 'Highsun',
+    'Fireseek', 'Sunswane', 'Harvestmoot', 'Leafall', 'Frostmoot', 'Sunwane'],
+  day_names: [], events: [],
+}, null, 2) + '\n', 'utf8')
+
+// The character fixture, born through the SAME validated write path the tools
+// use. xpNext is a stored field, so the XP-progress cases have a threshold.
+{
+  const { refused, reason } = await writeCharacter(rawFs, CHAR_DIR, 'alice', {
+    state: {
+      name: 'Alice',
+      identity: { level: 1, xp: 0, xpNext: 300 },
+      combat: { hp: { current: 8, max: 8 }, tempHp: 0 },
+      currency: 785,
+      spellSlots: { 1: { total: 2, used: 0 } },
+      equipment: {
+        gear: {
+          'Spellbook (arcane focus)': 1,
+          Robe: 1,
+          'Book (history)': 1,
+          Parchment: 8,
+          "Calligrapher's Supplies": 1,
+          "Scholar's pack": 1,
+        },
+      },
+    },
+    narrative: 'A tidy wizard in a grey robe, fond of parchment.\n',
+    player: 'scenario',
+    campaign: 'stage2-test',
+    calendar: JSON.parse(readFileSync(nodePath(`${CAMPAIGN}/calendar.json`), 'utf8')),
+  })
+  if (refused) {
+    console.error('concurrency.scenario: the fixture itself is invalid: ' + reason)
+    process.exit(1)
+  }
+}
 
 const sha = (p) => createHash('sha256').update(readFileSync(nodePath(p))).digest('hex')
 const ctx = { get: (n) => (n === 'fs' ? fs : undefined) }
@@ -137,20 +198,10 @@ function resetFixture({ currency = 785, hp = 8, maxHp = 8, xp = 0, used = 0 } = 
   writeState(s)
 }
 
-const realBefore = sha(REAL)
-const realStateExistedBefore = existsSync(nodePath(REAL_STATE))
-const realStateBefore = realStateExistedBefore ? sha(REAL_STATE) : null
-const markerBefore = readFileSync(nodePath(MARKER))
-
-// The whole live character directory, hashed before and after: "this run wrote
-// nothing", asserted without ever taking a position on what the campaign holds.
-// Strictly stronger than watching alice's two files, and indifferent to any
-// legitimate migration, rename, or number change.
-const LIVE_CHAR_DIR = `${ROOT}/campaigns/morgansfort/characters`
-const liveDirBefore = snapshotTree(LIVE_CHAR_DIR)
-
 try {
-  writeFileSync(nodePath(MARKER), JSON.stringify({ name: 'stage2-test' }), 'utf8')
+  // The marker already points at the throwaway campaign; the cases below just
+  // run. (The live-campaign save/restore this used to do is gone with the live
+  // campaign itself.)
 
   // --- two overlapping damage calls --------------------------------------
   // The core case. No keys: two hits are two hits, and BOTH must land.
@@ -243,11 +294,11 @@ try {
   check(sha(STATE) !== beforeRefusalRace, 'the successful half did write')
 
   // --- two overlapping XP awards -----------------------------------------
-  section('two concurrent dnd_xp_add calls — both must award')
+  section('two concurrent dnd_track xp changes — both must award')
   resetFixture({ xp: 0 })
   await Promise.all([
-    call('dnd_xp_add', { amount: '100', reason: 'trap' }),
-    call('dnd_xp_add', { amount: '100', reason: 'trap' }),
+    call('dnd_track', { xp: '+100', reason: 'trap' }),
+    call('dnd_track', { xp: '+100', reason: 'trap' }),
   ])
   check(readState().identity.xp === 200,
     `both awards applied: 0 + 100 + 100 = 200, got ${readState().identity.xp} (a lost update gives 100)`)
@@ -260,8 +311,8 @@ try {
   section('the same key twice, concurrently, applies exactly once')
   resetFixture({ xp: 0 })
   const [d1, d2] = await Promise.all([
-    call('dnd_xp_add', { amount: '100', key: 'session-4' }),
-    call('dnd_xp_add', { amount: '100', key: 'session-4' }),
+    call('dnd_track', { xp: '+100', key: 'session-4' }),
+    call('dnd_track', { xp: '+100', key: 'session-4' }),
   ])
   check(readState().identity.xp === 100,
     `a duplicated key charged once: got ${readState().identity.xp}`)
@@ -353,28 +404,14 @@ try {
   const finalState = readState()
   check(finalState.combat.hp.current === 6, 'all three writes landed: 8 - 1 - 1 = 6, got ' + finalState.combat.hp.current)
 } finally {
-  writeFileSync(nodePath(MARKER), markerBefore)
   resetFixture()
+  process.env.DND_ROOT = savedRoot
 }
 
-section('the real campaign was never touched')
-check(sha(REAL) === realBefore, 'morgansfort/alice.md is byte-identical')
-check(existsSync(nodePath(MARKER)), 'the active-campaign marker still exists')
-check(readFileSync(nodePath(MARKER)).equals(markerBefore), 'the marker was restored byte-for-byte, BOM included')
-check(JSON.parse(readFileSync(nodePath(MARKER), 'utf8').replace(/^\uFEFF/, '')).name === 'morgansfort',
-  'and the real campaign is active again')
-check(existsSync(nodePath(REAL_STATE)) === realStateExistedBefore,
-  `the real character's state file was ${realStateExistedBefore ? 'present' : 'absent'} and still is`)
-if (realStateExistedBefore) {
-  check(sha(REAL_STATE) === realStateBefore, 'and it is byte-identical')
-}
-
-// The whole-directory check: a concurrent write escaping into any other
-// character under the live campaign fails here.
-const liveDirChanges = diffTree(liveDirBefore, snapshotTree(LIVE_CHAR_DIR))
-check(liveDirChanges.length === 0,
-  'nothing under campaigns/morgansfort/characters moved'
-  + (liveDirChanges.length > 0 ? ' — ' + liveDirChanges.join('; ') : ' (whole tree hashed)'))
+section('the workspace stayed inside the temp tree')
+check(existsSync(nodePath(MARKER)), 'the active-campaign marker exists in the temp workspace')
+check(JSON.parse(readFileSync(nodePath(MARKER), 'utf8').replace(/^\uFEFF/, '')).name === 'stage2-test',
+  'and the throwaway campaign is the active one')
 
 console.log('')
 if (failures > 0) {

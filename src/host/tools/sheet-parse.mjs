@@ -285,7 +285,7 @@ export function formatCharacter(c) {
     })
     .join(' ')
   const lines = [
-    `# ${c.name || '(unnamed)'}${c.klass !== undefined ? ` — ${c.race !== undefined ? c.race.split(' (')[0] + ' ' : ''}${c.klass}` : ''}${c.level !== null ? ` Lv${c.level}` : ''}`,
+    `# ${c.name || '(unnamed)'}${c.klass !== undefined ? ` — ${c.race != null ? String(c.race).split(' (')[0] + ' ' : ''}${c.klass}` : ''}${c.level !== null ? ` Lv${c.level}` : ''}`,
     `HP ${hp}${c.tempHp ? ` (+${c.tempHp} temp)` : ''} · AC ${c.ac ?? '—'}${c.mageArmorAc ? ` (Mage Armor ${c.mageArmorAc})` : ''} · Init ${c.initiative ?? '—'} · Speed ${c.speed ?? '—'}`,
     `XP ${c.xp ?? '0'}/${c.xpNext ?? '?'}${c.spellSaveDC ? ` · DC ${c.spellSaveDC}` : ''}${c.spellAttack ? ` · Spell atk ${c.spellAttack}` : ''}`,
     abilityLine,

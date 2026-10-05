@@ -22,6 +22,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildTools } from '../src/host/tools/character-create.mjs'
 import { readCharacter } from '../src/host/tools/state-io.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 async function test(name, fn) {
   try {
@@ -53,6 +54,9 @@ const DATA_PREFIX = 'D:/DND/dsh-dnd-bundle/data'
 const guard = (p, method) => {
   const norm = String(p).replace(/\\/g, '/')
   if (norm.startsWith(DATA_PREFIX + '/')) return norm.replace(DATA_PREFIX, DATA_DIR)
+  // A source checkout resolves DATA_ROOT to THIS repo's data/ (import.meta.url),
+  // not the installed-bundle prefix above. Same read-only package property.
+  if (norm.startsWith(DATA_DIR + '/')) return norm
   if (!norm.startsWith(tempRoot)) throw new Error('LEAK: fs.' + method + '() outside the temp tree: ' + norm)
   return norm
 }

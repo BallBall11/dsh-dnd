@@ -150,7 +150,7 @@ pay a 15 cp cost with no copper pieces.
 **Both clocks are stamped on every write**: `updated` (real date) and
 `worldTime` (in-world, from the campaign's `calendar.json`).
 
-### Host tools (14)
+### Host tools (25)
 
 | Tool | Purpose |
 |---|---|
@@ -161,16 +161,34 @@ pay a 15 cp cost with no copper pieces.
 | `dnd_dc` | The DC ladder, and passive scores |
 | `dnd_mastery` | 2024 weapon mastery properties (Cleave, Topple, Vex, …) |
 | `dnd_srd_lookup` | Bundled 5e SRD entry by name and category |
+| `dnd_campaign_status` | The data root in effect, every campaign on it, which is active — **start here on a new workspace** |
+| `dnd_campaign_create` | **Write** scaffold a new campaign (state/arc/world/npcs/session-log) and set it active |
+| `dnd_campaign_update` | **Write** one section of a campaign document — set-section / append / remove / flag / activate; your prose is carried verbatim |
 | `dnd_campaign_state` | The active campaign's `state.md`, in whole or by section |
 | `dnd_campaign_search` | Full-text search of the campaign corpus — use before reading whole files |
 | `dnd_arc_status` | Where the campaign arc currently stands |
 | `dnd_character_get` | Read one character or the whole party, as JSON or a card |
-| `dnd_track` | **Write** HP, temp HP, spell slots, XP, conditions, consumables |
+| `dnd_character_create` | **Write** a validated character sheet + state file |
+| `dnd_track` | **Write** HP, temp HP, spell slots, spell lists (`spellbook:+Fireball`), XP (+ level progress), conditions, consumables |
+| `dnd_character_update` | **Write** a character's NARRATIVE sections (Features & Traits, backstory); refuses structured ones |
 | `dnd_spend` | **Write** coin out of the purse |
-| `dnd_xp_add` | **Write** an XP award |
 
-The eleven read tools are pure. The three write tools live in their own module
-(`lib/host/tools/track.mjs`) so the write path can be read and tested on its own.
+The read tools are pure. The write tools live in their own modules
+(`lib/host/tools/track.mjs`, `character-create.mjs`, `campaign-init.mjs`, …)
+so the write path can be read and tested on its own.
+
+**Bootstrap a workspace with tools, not shell commands.** On a fresh
+workspace, call `dnd_campaign_status` (what exists, what is active) and
+`dnd_campaign_create` (scaffold + activate a new campaign). They replace
+exploring the filesystem: the layout, the marker and the state.md section
+headings are the tools' job to know, not the model's to guess.
+
+**The data root never falls back to a guess.** The root is the session's
+workspace, or the explicit `DND_ROOT` / `DSH_CWD` env when no session takes
+part. There is no literal default: when the root cannot be resolved, every
+tool answers with a loud error telling the user to open dsh in the target
+workspace or set `DND_ROOT` — it never silently operates on a hard-coded
+path.
 
 **Business judgement happens at the tool layer.** `dnd_spend` decides whether a
 purchase is affordable and tells the DM the shortfall; the write layer's
@@ -214,7 +232,7 @@ npm run build      # assemble lib/ from src/
 npm run watch      # rebuild on change
 npm test           # 12 unit and contract suites
 npm run verify     # evaluate lib/client.js headlessly, as the loader does
-npm run test:writes # drive the write tools against campaigns/stage2-test
+npm run test:writes # drive the write tools end to end in a throwaway temp workspace
 npm run check      # all of the above
 ```
 
@@ -244,9 +262,10 @@ build time.
 - Refusal tests compare **file hashes**, not re-read values. "The file must not
   change" is a claim about bytes; re-reading through the same parser would agree
   with itself.
-- All write tests run in the throwaway `campaigns/stage2-test`. The active
-  campaign marker is repointed for the run and restored in a `finally`, read and
-  written as bytes.
+- All write scenarios are **self-contained**: both scenario scripts build a
+  throwaway workspace in the OS temp dir, point the explicit `DND_ROOT` env at
+  it, scaffold the campaign there, and guard every fs path against escaping the
+  tree. No live campaign is read or repointed, so they run on any machine.
 - `test/tool-args.test.mjs` calls **every** tool with no arguments and asserts
   none of them reports a result computed from a missing value.
 

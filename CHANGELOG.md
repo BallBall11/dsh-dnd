@@ -20,7 +20,119 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   for `"1/4"` — one concept, two formats. A shared `parseCr` answers both;
   bare numbers still pass.
 
-## [0.4.0] — 2026-10-05
+## [Unreleased]
+
+### Fixed
+
+- **`dnd_campaign_search` served stale results after an in-place write.**
+  The index cache's stamp read `f.mtime` from directory-listing entries that
+  never carry an mtime, so the stamp degraded to a bare name list: creating a
+  file invalidated the cache, but an OVERWRITE (`dnd_note` append,
+  `dnd_campaign_update` set-section) did not — a search right after a write
+  missed the new text until some file happened to be created or deleted. The
+  stamp now stats each corpus file (mtime + size). The regression test
+  survived a deliberate mutation check: with the old stamp restored it FAILS
+  with "got: No match".
+
+- **`dnd_character_update` was refused by the sandbox on every write.** The
+  narrative edit resolved the session but never threaded the resolved policy
+  into `writeCharacter`, so `fs-sandbox` judged the path against the process
+  cwd and denied the session workspace — 100% unwritable while `dnd_track` on
+  the SAME file succeeded. The policy now rides every narrative write, and a
+  write-contract test asserts both tools hand `writeText` the calling
+  session's policy as its 5th argument.
+- **Coin could leave a purse but never enter one.** `dnd_loot` told the DM to
+  hand winnings out with `dnd_track`/`dnd_spend`, but `dnd_track` had no
+  currency field and `dnd_spend` only accepts positive costs. `dnd_track`
+  gains `currency` (`+103 gp` credits, `-5 gp` debits with the same
+  shortfall-refusal as a spend, `=50 gp` sets).
+- **`dnd_character_get` now surfaces live encounter effects.** `dnd_effect`
+  stores Mage Armor in the encounter file by design, but the read side showed
+  only the sheet — the DM planned against AC 12 while the rules said 15.
+  JSON reads attach `activeEffects` (+ a note that the numbers above do NOT
+  include them); markdown cards append the same block; concentration rides
+  along. A character with no encounter file reads exactly as before.
+- **`dnd_campaign_create` scaffolds `calendar.json`.** `dnd_calendar`
+  refuses to invent one, so a fresh campaign's world clock was dead until a
+  file was written by hand — the exact hand-maintenance the bundle has been
+  removing. Default: Calendar of Harptos, 1492 DR, 08:00;
+  `calendarYear`/`calendarHour` override. `dnd_calendar` works on the
+  scaffold immediately.
+- **`formatCharacter` crashed on a migrated sheet with `race: null`** when
+  the markdown card branch was taken (`c.race.split` on null). Null-safe now.
+
+### Fixed (data)
+
+- **`dnd_level_up` could never level a Rogue or Cleric (2014).** The two
+  classes' `table` arrays shipped EMPTY in `data/srd-2014.json` — the prose
+  pipeline (`dnd_srd_lookup`) was fine, so nothing else complained, but the
+  level tool reads the structured table row for the next level and refused:
+  "the Rogue table has no level 4 row", for every argument combination,
+  `force:true` included. Both tables are filled from the SRD 5.1 values (20
+  rows each): Cleric with cantrips-known and the full spell-slot progression
+  (which also fills the empty "Spell Slots per Spell Level" section its
+  `dnd_srd_lookup` prose showed), Rogue with the sneak-attack dice column,
+  now rendered by the lookup as well. The 2024 dataset was already complete.
+- **New build gate for the class tables** (`test/srd-data.test.mjs`): every
+  class in BOTH datasets must have a 20-row table with the canonical level
+  sequence and prof-bonus curve, full casters must carry sane slot
+  progressions, and the rogue's sneak-attack dice must never shrink. This is
+  the assertion whose absence let the empty tables ship in 0.4.1.
+- **dnd_note's UTF-8 path is pinned by a regression test.** The field report
+  of Chinese bodies turning into '?' could not be reproduced — the on-disk
+  session-log.md carries intact Chinese and a round-trip test through the
+  write path passes. The test now guards the path; if corruption recurs, the
+  suspect is the invocation channel (a shell call with a non-UTF-8 codepage),
+  not the tool.
+
+
+### Added
+
+- **`dnd_campaign_update` - campaign documents get a controlled write path.**
+  A GM asked to update the campaign's state had only whole-file tools, so it
+  reached for the harness `create` command and hit "File already exists".
+  Ops: `set-section` (replace one section body - prose carried verbatim),
+  `append`, `remove`, `flag` (the machine-read Live State Flags), and
+  `activate` (point the runtime marker at an existing campaign - previously a
+  hand-written JSON file, per the persona's own instruction). The frontmatter,
+  the title/Ruleset preamble and untouched sections survive byte-for-byte, and
+  the result is re-split and self-checked before the write lands.
+- **`dnd_character_update` - a route for the character's narrative half.**
+  Set-section / append / remove over the sheet's prose sections (Features &
+  Traits, Backstory & Notes, Character Pillar, ...), through the same
+  per-character lock and validated write path as `dnd_track`. The gate uses
+  the closed section vocabulary: a structured section (or a structured NAME on
+  a migrated sheet, where those headings no longer exist) is refused with a
+  pointer to `dnd_track` / `dnd_character_create`; the generated block is
+  refused because every write re-renders it.
+- **`dnd_track` learns `spells`.** `"spellbook:+Fireball,prepared:-Mage Armor"`
+  adds and drops spells in the authoritative state file - the write path that
+  did not exist when a wizard leveled up. The `xp` change now reports level
+  progress from the stored `xpNext`, absorbing what `dnd_xp_add` did.
+
+### Changed
+
+- **`dnd_xp_add` is removed; `dnd_track xp` is the one XP route.** The two
+  tools applied the same mutation with different reporting; the report moved
+  into the change list and the duplicate surface is gone.
+- **The persona no longer teaches hand-written campaign files.** The runtime
+  marker is written by `dnd_campaign_update op activate`; campaign documents
+  and character narrative go through the update tools; the file editor is
+  scoped to freeform prose and exceptional cases.
+- **The data root no longer falls back to a hard-coded `D:/DND`.** The root
+  is the session's workspace, or the explicit `DND_ROOT`/`DSH_CWD` env when no
+  session takes part. When neither exists, every tool answers a loud error
+  telling the user to open dsh in the target workspace or set `DND_ROOT` -
+  previously "could not tell where the data is" silently became "operating on
+  D:/DND". The panel's HTTP routes surface the same error instead of serving
+  the fallback root with a warning.
+- **The write/concurrency scenario scripts no longer touch a live campaign.**
+  Both build a throwaway temp workspace, point the explicit `DND_ROOT` env at
+  it, scaffold the fixture through the same validated `writeCharacter` path,
+  and guard every fs path against escaping the tree. Same assertions, no live
+  coupling.
+
+## [0.4.0] - 2026-10-05
 
 ### Added
 

@@ -186,9 +186,14 @@ await test('an enemy card can be created through the shared write path', async (
 
 await test('a hit with a target lands the damage and marks a downed enemy dead', async () => {
   // "999" is all constants: a deterministic total that must kill a 7-HP enemy.
-  const out = await attackTool.execute({
-    toHit: 20, ac: 5, damage: '999', target: 'Goblin-1', label: 'Boulder',
-  }, exec2)
+  // A natural 1 auto-misses and writes nothing, so retry until a genuine hit —
+  // a miss is free, and a crit (natural 20) kills just as dead as a normal hit.
+  let out = ''
+  for (let i = 0; i < 200 && !/HIT/.test(String(out)); i += 1) {
+    out = await attackTool.execute({
+      toHit: 20, ac: 5, damage: '999', target: 'Goblin-1', label: 'Boulder',
+    }, exec2)
+  }
   assert.match(String(out), /HIT/)
   // The report names the resolved stem, not the request spelling.
   assert.match(String(out), /Applied to goblin-1/)
@@ -199,7 +204,12 @@ await test('a hit with a target lands the damage and marks a downed enemy dead',
 })
 
 await test('a miss with a target writes nothing', async () => {
-  const out = await attackTool.execute({ toHit: -100, ac: 25, damage: '999', target: 'Goblin-1' }, exec2)
+  // toHit -100 still auto-HITS on a natural 20 (5%), and a hit would land
+  // damage — retry until a genuine miss so the "wrote nothing" claim holds.
+  let out = ''
+  for (let i = 0; i < 200 && !/MISS/.test(String(out)); i += 1) {
+    out = await attackTool.execute({ toHit: -100, ac: 25, damage: '999', target: 'Goblin-1' }, exec2)
+  }
   assert.match(String(out), /MISS/)
   const s = await readState('goblin-1')
   assert.equal(s.combat.hp.current, 0, 'a miss must not change HP again')
@@ -223,21 +233,39 @@ await test('the same idempotency key does not land the damage twice', async () =
 })
 
 await test('temp HP absorbs before the real pool through the target mode', async () => {
-  await createTool.execute({ name: 'Hobgoblin-1', kind: 'enemy', hp: 20, ac: 10, abilities: {} }, exec2)
-  // Give it temp HP through the track tool's own write path.
+  // A natural 20 is a CRIT and doubles the damage, so the landing numbers
+  // differ and the attack cannot be undone through the write path. A crit
+  // therefore retries against a FRESH enemy (unique name) — 1/20 per attempt,
+  // so this terminates almost immediately.
   const trackTool = (await import('../src/host/tools/track.mjs')).buildTools(ctx2).find((t) => t.name === 'dnd_track')
-  const trackOut = await trackTool.execute({ character: 'Hobgoblin-1', tempHp: '+5' }, exec2)
-  const attackOut = await attackTool.execute({ toHit: 20, ac: 5, damage: '8', target: 'Hobgoblin-1' }, exec2)
-  const s = await readState('hobgoblin-1')
-  assert.match(String(trackOut), /Temp HP/, 'track must set temp HP first:\n' + String(trackOut))
-  assert.match(String(attackOut), /temp HP absorbed 5/, 'attack must route through applyDamage:\n' + String(attackOut))
-  assert.equal(s.combat.tempHp, 0, '8 damage: 5 absorbed by temp HP')
-  assert.equal(s.combat.hp.current, 17, 'the remaining 3 reach the real pool')
+  for (let i = 1; i <= 50; i += 1) {
+    const name = 'Hobgoblin-' + i
+    await createTool.execute({ name, kind: 'enemy', hp: 20, ac: 10, abilities: {} }, exec2)
+    // Give it temp HP through the track tool's own write path.
+    const trackOut = await trackTool.execute({ character: name, tempHp: '+5' }, exec2)
+    const attackOut = await attackTool.execute({ toHit: 20, ac: 5, damage: '8', target: name }, exec2)
+    // Retry on a natural-1 MISS as well: nothing was written, and only a
+    // non-crit hit has the deterministic landing numbers this test asserts.
+    if (!/HIT/.test(String(attackOut)) || /CRITICAL/.test(String(attackOut))) continue
+    const s = await readState(name.toLowerCase())
+    assert.match(String(trackOut), /Temp HP/, 'track must set temp HP first:\n' + String(trackOut))
+    assert.match(String(attackOut), /temp HP absorbed 5/, 'attack must route through applyDamage:\n' + String(attackOut))
+    assert.equal(s.combat.tempHp, 0, '8 damage: 5 absorbed by temp HP')
+    assert.equal(s.combat.hp.current, 17, 'the remaining 3 reach the real pool')
+    return
+  }
+  assert.fail('50 consecutive critical hits — the dice are broken')
 })
 
 await test('a resistance halves the damage before landing', async () => {
   await createTool.execute({ name: 'Fiend-1', kind: 'enemy', hp: 20, ac: 10, abilities: {} }, exec2)
-  await attackTool.execute({ toHit: 20, ac: 5, damage: '9', target: 'Fiend-1', damageType: 'fire', resistance: 'fire' }, exec2)
+  // A natural-1 miss writes nothing, so retry until the damage actually lands;
+  // a natural-20 crit doubles the (halved) damage, so require a non-crit hit.
+  let out = ''
+  for (let i = 0; i < 200 && (!/HIT/.test(String(out)) || /CRITICAL/.test(String(out))); i += 1) {
+    out = await attackTool.execute({ toHit: 20, ac: 5, damage: '9', target: 'Fiend-1', damageType: 'fire', resistance: 'fire' }, exec2)
+  }
+  assert.match(String(out), /HIT/)
   const s = await readState('fiend-1')
   assert.equal(s.combat.hp.current, 20 - 4, '9 halved to 4 (floor)')
 })

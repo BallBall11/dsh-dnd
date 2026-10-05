@@ -101,6 +101,9 @@ const makeTarget = (d) => ({ targetKey: String(d).toLowerCase(), displayPath: St
 const guard = (p, method) => {
   const norm = String(p).replace(/\\/g, '/')
   if (norm.startsWith(DATA_PREFIX + '/')) return DATA_DIR + norm.slice(DATA_PREFIX.length + 1)
+  // A source checkout resolves DATA_ROOT to THIS repo's data/ (import.meta.url),
+  // not the installed-bundle prefix above. Same read-only package property.
+  if (norm.startsWith(DATA_DIR)) return norm
   if (!norm.startsWith(root)) throw new Error('LEAK: fs.' + method + '() outside the temp tree: ' + norm)
   return norm
 }
@@ -165,10 +168,10 @@ await test('the same key is a no-op, and the tool does not stack levels', async 
   assert.equal(readState('sera').identity.level, 5)
 })
 
-await test('XP gating releases once dnd_xp_add has done its job', async () => {
+await test('XP gating releases once dnd_track xp has done its job', async () => {
   const { buildTools: buildTrack } = await import('../src/host/tools/track.mjs')
-  const xpAdd = buildTrack(ctx).find((t) => t.name === 'dnd_xp_add')
-  await xpAdd.execute({ character: 'Sera', amount: '14500' }, exec)
+  const xpAdd = buildTrack(ctx).find((t) => t.name === 'dnd_track')
+  await xpAdd.execute({ character: 'Sera', xp: '+14500' }, exec)
   const out = await levelUp.execute({ character: 'Sera', confirm: true }, exec)
   assert.match(String(out), /升到 6 级/)
   assert.equal(readState('sera').identity.level, 6)

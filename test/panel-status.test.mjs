@@ -19,6 +19,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { buildTools } from '../src/host/tools/panel.mjs'
 import { writeCharacter } from '../src/host/tools/state-io.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 async function test(name, fn) {
   try {

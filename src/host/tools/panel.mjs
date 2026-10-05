@@ -51,6 +51,9 @@ export function buildTools(ctx) {
       // in one reply.
       const session = sessionOf(ctx, exec)
       const origin = routeRoot(ctx)
+      if (origin.error !== undefined) {
+        return origin.error + (origin.warnings && origin.warnings.length > 0 ? '\n' + origin.warnings.join('\n') : '')
+      }
       const toolRoot = typeof session?.header?.cwd === 'string' && session.header.cwd !== ''
         ? session.header.cwd.replace(/\\/g, '/')
         : origin.root

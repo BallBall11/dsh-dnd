@@ -12,24 +12,45 @@
  */
 
 /**
- * Data root. Campaigns and characters live here; the plugin's data/ does not.
+ * The error every unresolvable-root path funnels into. One string, so tools
+ * phrase the failure identically and the fix is always stated: this is a
+ * configuration problem for the USER to resolve, not something the bundle can
+ * guess its way out of.
  *
- * The root is the DSH SESSION's workspace (`session.header.cwd`), resolved per
- * tool call — a campaign follows the workspace the session was opened in, so
- * the bundle is portable across machines. When no session takes part (HTTP
- * routes, unit tests calling `execute(args)` directly), the fallback chain is
- * `DND_ROOT` / `DSH_CWD` env, then the historical literal.
+ * Background: the data root is the DSH SESSION's workspace (`session.header.cwd`),
+ * resolved per tool call — a campaign follows the workspace the session was
+ * opened in, so the bundle is portable across machines. When no session takes
+ * part (HTTP routes, unit tests calling `execute(args)` directly), the explicit
+ * `DND_ROOT` / `DSH_CWD` env is the ONLY fallback. A hard-coded `D:/DND` used
+ * to sit at the end of that chain, which meant "could not tell where the data
+ * is" silently became "operating on D:/DND" — plausible-looking answers from a
+ * workspace nobody chose.
  */
-export const DND_ROOT = process.env.DND_ROOT ?? process.env.DSH_CWD ?? 'D:/DND'
+export const ROOT_ERROR = '无法解析数据根：本调用既没有携带工作区的 dsh 会话，也未设置 DND_ROOT / DSH_CWD 环境变量。'
+  + '请在目标工作区中打开 dsh 后重试，或显式设置 DND_ROOT 指向战役数据目录。'
 
 /**
- * Resolve the data root a call should use.
+ * The env-configured root, or undefined. Read LAZILY — tests and embedded
+ * hosts set DND_ROOT after this module has been imported, and a load-time
+ * snapshot would freeze whatever the process was launched with.
+ * @returns the explicit root, or undefined when none is set.
+ */
+export function envRoot() {
+  const fromEnv = process.env.DND_ROOT ?? process.env.DSH_CWD
+  return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
+}
+
+/**
+ * Resolve the data root a call should use, or undefined when it cannot be
+ * determined. Callers must treat undefined as ROOT_ERROR — loud, addressed to
+ * the user — never as "somewhere plausible".
  * @param session - the live Session (session-scope's `sessionOf`), or undefined.
- * @returns the session's workspace, or the fallback root.
+ * @returns the session's workspace, or the env-configured root, or undefined.
  */
 export function dndRoot(session) {
   const cwd = session?.header?.cwd
-  return typeof cwd === 'string' && cwd !== '' ? cwd : DND_ROOT
+  if (typeof cwd === 'string' && cwd !== '') return cwd
+  return envRoot()
 }
 
 /**
@@ -41,12 +62,14 @@ export function dndRoot(session) {
  * served ANOTHER workspace's campaign while looking perfectly healthy.
  *
  * Fallback is never silent: the caller must surface the returned warnings in
- * its response, so a panel shows "this data came from the fallback root"
- * instead of plausible data from the wrong campaign.
+ * its response, so a panel shows "this data came from the env root"
+ * instead of plausible data from the wrong campaign. When NO root can be
+ * determined — no live session carries a workspace and no env is set — the
+ * result is an error, not a guessed directory.
  *
  * @param ctx - the host context.
- * @returns `{ root, source, warnings }`. `source` is `'session'` or
- *   `'fallback'`.
+ * @returns `{ root, source, warnings }` with `source` `'session'` or `'env'`,
+ *   or `{ error: ROOT_ERROR, warnings }` when unresolvable.
  */
 export function routeRoot(ctx) {
   const warnings = []
@@ -62,12 +85,16 @@ export function routeRoot(ctx) {
       }
     }
   } catch {
-    // Enumeration is best-effort; the fallback below keeps the panel alive.
+    // Enumeration is best-effort; the env root below keeps the panel alive.
   }
   if (candidates.length === 0) {
-    warnings.push('面板数据来自回退根 ' + DND_ROOT + '（未能从存活会话解析出工作区），'
-      + '可能不是当前会话的战役。')
-    return { root: DND_ROOT, source: 'fallback', warnings }
+    const env = envRoot()
+    if (env === undefined) {
+      return { error: ROOT_ERROR, warnings }
+    }
+    warnings.push('面板数据来自 DND_ROOT 环境变量指定的根 ' + env
+      + '（未能从存活会话解析出工作区）。若这不是预期工作区，请在目标工作区中打开 dsh。')
+    return { root: env, source: 'env', warnings }
   }
   const root = candidates[candidates.length - 1]
   if (candidates.length > 1) {
@@ -79,10 +106,12 @@ export function routeRoot(ctx) {
 
 /**
  * The active-campaign marker, under the call's data root. Written at
- * /dm:dnd load; tells every tool which campaign is in play.
+ * /dm:dnd load; tells every tool which campaign is in play. Undefined when no
+ * data root can be resolved — callers treat that as ROOT_ERROR.
  */
 export function activeMarker(session) {
-  return `${dndRoot(session)}/.runtime/active-campaign.json`
+  const root = dndRoot(session)
+  return root === undefined ? undefined : `${root}/.runtime/active-campaign.json`
 }
 
 /**
@@ -144,7 +173,9 @@ export function parseJsonLoose(text) {
 export async function readActiveCampaign(fs, session) {
   try {
     if (fs === undefined) return undefined
-    const target = await fs.resolve(activeMarker(session))
+    const marker = activeMarker(session)
+    if (marker === undefined) return undefined
+    const target = await fs.resolve(marker)
     if ((await fs.stat(target)) === undefined) return undefined
     const parsed = parseJsonLoose(await fs.readText(target))
     return typeof parsed.name === 'string' && parsed.name !== '' ? parsed.name : undefined
@@ -155,14 +186,23 @@ export async function readActiveCampaign(fs, session) {
 
 /**
  * Resolve the active campaign and its directory.
+ *
+ * The result is a discriminated union so a caller can distinguish three
+ * answers that used to collapse into one:
+ *   - `{ error: ROOT_ERROR }` — no data root could be resolved. LOUD: the tool
+ *     must return it verbatim, because the fix belongs to the user.
+ *   - `undefined` — a root exists but no active campaign is set.
+ *   - `{ campaign, dir }` — resolved; proceed.
+ *
  * @param fs - the host fs service.
  * @param session - the live Session, or undefined.
- * @returns `{ campaign, dir }`, or undefined when no campaign is active.
  */
 export async function activeCampaignDir(fs, session) {
+  const root = dndRoot(session)
+  if (root === undefined) return { error: ROOT_ERROR }
   const campaign = await readActiveCampaign(fs, session)
   if (campaign === undefined) return undefined
-  return { campaign, dir: `${dndRoot(session)}/campaigns/${campaign}` }
+  return { campaign, dir: `${root}/campaigns/${campaign}` }
 }
 
 /**

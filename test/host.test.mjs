@@ -26,6 +26,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
+
 let failures = 0
 async function test(name, fn) {
   try {
@@ -405,6 +407,28 @@ await test('dnd_campaign_search runs twice (exercises the cache)', async () => {
   const first = await call('dnd_campaign_search', { query: 'the', max: 2 })
   const second = await call('dnd_campaign_search', { query: 'the', max: 2 })
   assert.equal(first, second, 'a cached search must return identical results')
+})
+
+await test('an OVERWRITE of an existing corpus file invalidates the search cache immediately', async () => {
+  // The 0.4.1 field report: the cache stamp read `f.mtime` from directory
+  // entries that never carry an mtime, so the stamp degraded to a bare name
+  // list. A search right after an in-place write (dnd_note append,
+  // dnd_campaign_update set-section) missed the new text until some file was
+  // created or deleted. The stamp now stats each corpus file (mtime + size),
+  // and THIS is the regression that pins it: write, search, MISS is a bug.
+  const marker = 'zanzibar-cache-probe'
+  // The probe WORD appears in the no-match error message (it echoes the
+  // query), so the assertions must match the corpus LINE, not the word.
+  const probeLine = `${marker} is written in place`
+  const statePath = path.join(tempCampaigns, 'testcamp', 'state.md')
+  const before = readFileSync(statePath, 'utf8')
+  const miss = await call('dnd_campaign_search', { query: marker })
+  assert.match(miss, /No match/, 'the probe text must not exist yet')
+  writeFileSync(statePath, before + `\n- ${probeLine}.\n`, 'utf8')
+  const hit = await call('dnd_campaign_search', { query: marker })
+  assert.ok(hit.includes(probeLine), 'a search right after an overwrite MUST find the new text, got: ' + String(hit).slice(0, 120))
+  const again = await call('dnd_campaign_search', { query: marker })
+  assert.ok(again.includes(probeLine), 'the next search must serve the NEW content, not a stale copy')
 })
 
 await test('dnd_srd_lookup finds a spell', async () => {

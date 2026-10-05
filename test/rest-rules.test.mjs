@@ -136,6 +136,9 @@ const makeTarget = (d) => ({ targetKey: String(d).toLowerCase(), displayPath: St
 const guard = (p, method) => {
   const norm = String(p).replace(/\\/g, '/')
   if (norm.startsWith(DATA_PREFIX + '/')) return DATA_DIR + norm.slice(DATA_PREFIX.length + 1)
+  // A source checkout resolves DATA_ROOT to THIS repo's data/ (import.meta.url),
+  // not the installed-bundle prefix above. Same read-only package property.
+  if (norm.startsWith(DATA_DIR)) return norm
   if (!norm.startsWith(root)) throw new Error('LEAK: fs.' + method + '() outside the temp tree: ' + norm)
   return norm
 }

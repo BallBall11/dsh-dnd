@@ -41,6 +41,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/effects.mjs'
 import { snapshotTree, diffTree, hashLivePath, liveExists } from './support/live-data.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
 async function test(name, fn) {

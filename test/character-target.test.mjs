@@ -63,6 +63,7 @@ import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/track.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
 /**
@@ -383,12 +384,12 @@ await test('resolution is scoped to the ACTIVE campaign, by design', async () =>
 })
 
 await test('all three write tools resolve the target the same way', async () => {
-  // dnd_track, dnd_spend and dnd_xp_add each pass `args.character` to
-  // `locateAndApply`. Testing only dnd_track would leave two call sites free to
-  // drift, and they are separate lines of code.
+  // dnd_track, dnd_spend and dnd_character_update each pass `args.character`
+  // through the shared resolution. Testing only dnd_track would leave two call
+  // sites free to drift, and they are separate lines of code.
   const before = arm()
-  const outXp = String(await call('dnd_xp_add', { character: 'MARIA', amount: '10' }))
-  assert.deepEqual(moved(before), ['maria'], 'dnd_xp_add must resolve MARIA to maria; prose was: ' + outXp)
+  const outXp = String(await call('dnd_track', { character: 'MARIA', xp: '+10' }))
+  assert.deepEqual(moved(before), ['maria'], 'dnd_track must resolve MARIA to maria; prose was: ' + outXp)
 
   const before2 = arm()
   const outTrack = String(await call('dnd_track', { character: 'maria', conditions: 'prone' }))

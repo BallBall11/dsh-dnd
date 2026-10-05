@@ -692,6 +692,7 @@ export async function withEncounterLock(key, work) {
  */
 async function locateCharacter(fs, requested, session) {
   const located = await activeCampaignDir(fs, session)
+  if (located?.error !== undefined) return { error: located.error }
   if (located === undefined) {
     return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
   }
@@ -1106,6 +1107,7 @@ export function buildTools(ctx) {
     // an encounter for every character in the campaign, including ones who never
     // rolled anything.
     const found = await activeCampaignDir(fs, sessionOf(ctx, exec))
+    if (found?.error !== undefined) return found.error
     if (found === undefined) {
       return 'No active campaign. Load one with /dm:dnd load <campaign> first.'
     }

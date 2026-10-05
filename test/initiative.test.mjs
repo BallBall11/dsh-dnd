@@ -29,6 +29,7 @@ import { readFile, stat as fsStat, readdir } from 'node:fs/promises'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
 async function test(name, fn) {

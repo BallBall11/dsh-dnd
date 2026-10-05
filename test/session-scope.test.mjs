@@ -41,6 +41,10 @@ import { writeCharacter, readCharacter } from '../src/host/tools/state-io.mjs'
 import { writePolicyFor, sessionOf } from '../src/host/tools/session-scope.mjs'
 import { buildTools } from '../src/host/tools/track.mjs'
 
+// The agentless-call tests rely on the env root fallback: with no exec there is
+// no session, so the ONLY root is the explicit DND_ROOT — the new contract.
+process.env.DND_ROOT ??= 'D:/DND'
+
 let failures = 0
 async function test(name, fn) {
   try {

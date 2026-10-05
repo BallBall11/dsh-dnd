@@ -30,6 +30,7 @@ import {
   snapshotTree,
   diffTree,
 } from './support/live-data.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
 async function test(name, fn) {

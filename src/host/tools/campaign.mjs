@@ -77,6 +77,7 @@ export function buildTools(ctx) {
     const fs = getFs()
     if (fs === undefined) return { error: 'fs service unavailable' }
     const found = await activeCampaignDir(fs, sessionOf(ctx, exec))
+    if (found?.error !== undefined) return { error: found.error }
     if (found === undefined) {
       return { error: 'No active campaign. Load one with /dm:dnd load <campaign> (this writes .runtime/active-campaign.json).' }
     }
@@ -157,7 +158,23 @@ export function buildTools(ctx) {
 
       const listing = await listMarkdown(located.fs, located.dir)
       const wanted = args.file !== undefined ? String(args.file) : undefined
-      const stamp = listing.map((f) => `${f.name}:${f.mtime ?? ''}`).join(',')
+      // The stamp must reflect every file's CONTENT version, not just which
+      // files exist. `listMarkdown` entries carry no mtime (the directory
+      // listing does not stat each file), so the old `f.mtime ?? ''` was
+      // always the empty string and the stamp degraded to a bare name list —
+      // an overwrite (dnd_note append, dnd_campaign_update set-section) never
+      // invalidated the cache, and a search right after a write missed the
+      // new text until some file was created or deleted. Stat each corpus
+      // file instead; a campaign corpus is tens of files, not thousands.
+      const stampParts = []
+      for (const f of listing) {
+        const target = f.target ?? await located.fs.resolve(f.path)
+        const info = await located.fs.stat(target).catch(() => undefined)
+        // Size rides with mtime: an in-place rewrite within the same clock
+        // tick can carry an identical mtime, and size is what moved then.
+        stampParts.push(`${f.name}:${info?.mtime ?? ''}:${info?.size ?? ''}`)
+      }
+      const stamp = stampParts.join(',')
       const index = await indexCache.get(located.campaign, stamp, () => buildIndex(located.fs, located.dir))
 
       const results = []

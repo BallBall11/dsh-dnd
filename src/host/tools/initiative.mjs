@@ -470,6 +470,7 @@ export function buildTools(ctx) {
    */
   async function locateEncounter(fs, requested, session) {
     const located = await activeCampaignDir(fs, session)
+    if (located?.error !== undefined) return { error: located.error }
     if (located === undefined) {
       return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
     }

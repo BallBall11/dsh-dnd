@@ -28,6 +28,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statS
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { advanceCalendar, setHour, describeCalendar, readCalendarFile, buildTools, REST_HOURS, HOURS_PER_UNIT } from '../src/host/tools/calendar.mjs'
+process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
 /**

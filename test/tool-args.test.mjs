@@ -22,6 +22,7 @@ import path from 'node:path'
 import * as roll from '../src/host/tools/roll.mjs'
 import * as lookup from '../src/host/tools/lookup.mjs'
 import * as campaign from '../src/host/tools/campaign.mjs'
+import * as campaignInit from '../src/host/tools/campaign-init.mjs'
 import * as sheet from '../src/host/tools/sheet.mjs'
 import * as track from '../src/host/tools/track.mjs'
 
@@ -71,17 +72,20 @@ const fs = {
 const ctx = { get: (n) => (n === 'fs' ? fs : undefined) }
 const TOOLS = [
   ...roll.buildTools(ctx), ...lookup.buildTools(ctx),
-  ...campaign.buildTools(ctx), ...sheet.buildTools(ctx), ...track.buildTools(ctx),
+  ...campaign.buildTools(ctx), ...campaignInit.buildTools(ctx), ...sheet.buildTools(ctx), ...track.buildTools(ctx),
 ]
 
 // Tools that legitimately need no argument, and what they should do instead.
 // Listing them explicitly means a NEW tool cannot join this category by
 // accident: it has to be named here.
+// The 无法解析数据根 alternative is the new root contract: with no session and
+// no env, the honest answer is the loud ROOT_ERROR, which is a diagnosis.
 const NO_ARGUMENT_TOOLS = {
   dnd_mastery: /Weapon mastery properties/,
   dnd_dc: /Standard DC ladder/,
-  dnd_campaign_state: /Campaign/,
-  dnd_arc_status: /arc type|no "## Campaign Arc"/,
+  dnd_campaign_state: /Campaign|无法解析数据根/,
+  dnd_arc_status: /arc type|no "## Campaign Arc"|无法解析数据根/,
+  dnd_campaign_status: /Data root|无法解析数据根/,
   dnd_character_get: /./,
 }
 
@@ -110,7 +114,7 @@ await test('every tool is either no-argument or rejects a missing argument', asy
     // `No match for "undefined"` reads as a legitimate miss.
     assert.match(
       out,
-      /needs|must|could not read|Invalid|Unknown|no .* given|not found|No active campaign/i,
+      /needs|must|could not read|Invalid|Unknown|no .* given|not found|No active campaign|无法解析数据根/i,
       `${tool.name} answered without complaining, so the model cannot tell it lost an argument:\n  ${out.split('\n')[0]}`,
     )
     assert.ok(
@@ -145,13 +149,16 @@ await test('an empty-string query is rejected the same way as a missing one', as
   }
 })
 
-await test('a missing amount is refused for both coin and XP, without writing', async () => {
-  for (const name of ['dnd_spend', 'dnd_xp_add']) {
-    const tool = TOOLS.find((t) => t.name === name)
-    const out = String(await tool.execute({}))
-    assert.match(out, /needs an `amount`/, `${name}: ${out}`)
-    assert.match(out, /Nothing was written/, `${name} must say nothing was written: ${out}`)
-  }
+await test('a missing amount is refused for coin, and a no-change dnd_track is refused, without writing', async () => {
+  const spend = TOOLS.find((t) => t.name === 'dnd_spend')
+  const out = String(await spend.execute({}))
+  assert.match(out, /needs an `amount`/, `dnd_spend: ${out}`)
+  assert.match(out, /Nothing was written/, 'dnd_spend must say nothing was written')
+
+  const track = TOOLS.find((t) => t.name === 'dnd_track')
+  const out2 = String(await track.execute({}))
+  assert.match(out2, /needs at least one of/, `dnd_track: ${out2}`)
+  assert.match(out2, /Nothing was written/, 'dnd_track must say nothing was written')
 })
 
 await test('every tool that declares a required parameter actually enforces it', async () => {

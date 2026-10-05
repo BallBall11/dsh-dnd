@@ -237,6 +237,7 @@ export function buildTools(ctx) {
       if (fs === undefined) return 'fs service unavailable'
 
       const located = await activeCampaignDir(fs, sessionOf(ctx, exec))
+      if (located?.error !== undefined) return located.error
       if (located === undefined) {
         return 'No active campaign. Load one with /dm:dnd load <campaign> first.'
       }

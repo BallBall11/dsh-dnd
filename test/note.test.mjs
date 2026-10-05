@@ -108,5 +108,22 @@ await test('bad calls are refused before anything is read or written', async () 
   assert.match(String(await note.execute({ kind: 'loot', body: 'x'.repeat(5000) }, exec)), /under 4000/)
 })
 
+
+// --- non-ASCII bodies must survive the write path byte-for-byte -------------
+// The field report said Chinese written by dnd_note came back as '?' garbage.
+// The write path itself is UTF-8 end to end (readText/writeText carry strings);
+// this test pins that so a future encoding change cannot ship silently.
+await test('a Chinese body survives the round trip intact', async () => {
+  const body = '【错误报告】中文内容：丧钟自鸣，盐沼的夜。'
+  const out = await note.execute({ kind: 'freeform', body }, exec)
+  assert.match(out, /Appended a freeform entry/)
+  const text = readFileSync(logPath(), 'utf8')
+  assert.ok(text.includes(body), 'the body must appear verbatim in session-log.md; file tail was: ' + JSON.stringify(text.slice(-300)))
+  // And the corpus search the reply advertises must find it again.
+  const search = buildCampaign(ctx).find((t) => t.name === 'dnd_campaign_search')
+  const found = await search.execute({ query: '丧钟自鸣' }, exec)
+  assert.match(String(found), /match/)
+})
+
 console.log(failures === 0 ? 'note.test.mjs: all passed' : `note.test.mjs: ${failures} failure(s)`)
 if (failures > 0) process.exit(1)

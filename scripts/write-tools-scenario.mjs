@@ -3,17 +3,18 @@
  *
  * scenario-test.mjs drives `writeCharacter` directly, which is why the money
  * rules were covered while `dnd_spend` itself never ran. This goes through the
- * real `execute(args)` of dnd_spend / dnd_track / dnd_xp_add, so the argument
+ * real `execute(args)` of dnd_spend / dnd_track, so the argument
  * parsing, the affordability decision, the idempotency check and the returned
  * prose are all exercised — the parts a DM actually meets.
  *
  * ## Safety
  *
- * Every write lands in `campaigns/stage2-test`. The active-campaign marker is
- * repointed at it for the duration and restored in a `finally`, so a crash
- * mid-run cannot leave the real campaign active. The real
- * `campaigns/morgansfort/characters/alice.md` is hashed before and after and
- * the run fails if it moved.
+ * The scenario is SELF-CONTAINED: it builds a throwaway workspace in the OS
+ * temp dir, points the explicit `DND_ROOT` env at it for the duration, and
+ * scaffolds the campaign inside it — no live campaign is read, repointed, or
+ * hashed, because there is no live campaign in the picture at all. Every fs
+ * method guards its paths against escaping the temp tree, so a leak fails
+ * loudly instead of touching a real campaign.
  *
  * ## Why it asserts on BYTES, not on re-reads
  *
@@ -21,41 +22,103 @@
  * disk. Re-reading through the same parser that may be wrong would agree with
  * itself. So the refusals compare file hashes.
  */
-import { readFileSync, writeFileSync, statSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, statSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/track.mjs'
-import { snapshotTree, diffTree } from '../test/support/live-data.mjs'
+import { writeCharacter } from '../src/host/tools/state-io.mjs'
 
 const nodePath = (p) => String(p).replace(/\//g, path.sep)
 const target = (p) => ({ targetKey: String(p).toLowerCase(), displayPath: String(p).replace(/\\/g, '/') })
 
+// ---------------------------------------------------------------------------
+// the throwaway workspace
+// ---------------------------------------------------------------------------
+const savedRoot = process.env.DND_ROOT
+const tempRoot = mkdtempSync(path.join(tmpdir(), 'dnd-write-scenario-')).replace(/\\/g, '/')
+process.env.DND_ROOT = tempRoot
+process.on('exit', () => {
+  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* gone */ }
+})
+
+/** Every fs path must stay inside the temp tree; a leak is a hard failure. */
+function guard(p, method) {
+  const norm = String(p).replace(/\\/g, '/')
+  if (!norm.startsWith(tempRoot)) {
+    throw new Error('LEAK: fs.' + method + '() outside the temp workspace: ' + norm)
+  }
+  return norm
+}
+
 const fs = {
-  async resolve(p) { return target(p) },
+  async resolve(p) { return target(guard(p, 'resolve')) },
   async stat(t) {
     try {
-      const s = statSync(nodePath(t.displayPath))
+      const s = statSync(nodePath(guard(t.displayPath, 'stat')))
       return { type: s.isDirectory() ? 'directory' : 'file', size: s.size, mtime: s.mtimeMs }
     } catch { return undefined }
   },
-  async readText(t) { return readFileSync(nodePath(t.displayPath), 'utf8') },
-  async writeText(t, text) { writeFileSync(nodePath(t.displayPath), text, 'utf8') },
+  async readText(t) { return readFileSync(nodePath(guard(t.displayPath, 'readText')), 'utf8') },
+  async writeText(t, text) { writeFileSync(nodePath(guard(t.displayPath, 'writeText')), text, 'utf8') },
   async listDir(t) {
-    const base = String(t.displayPath).replace(/\/$/, '')
-    return readdirSync(nodePath(t.displayPath), { withFileTypes: true }).map((e) => ({
+    const base = String(guard(t.displayPath, 'listDir')).replace(/\/$/, '')
+    return readdirSync(nodePath(base), { withFileTypes: true }).map((e) => ({
       name: e.name, target: target(`${base}/${e.name}`),
       type: e.isDirectory() ? 'directory' : 'file',
     }))
   },
 }
 
-const ROOT = 'D:/DND'
+const ROOT = tempRoot
 const MARKER = `${ROOT}/.runtime/active-campaign.json`
 const CAMPAIGN = `${ROOT}/campaigns/stage2-test`
 const CHAR_DIR = `${CAMPAIGN}/characters`
 const STATE = `${CHAR_DIR}/alice.state.json`
 const SHEET = `${CHAR_DIR}/alice.md`
-const REAL = `${ROOT}/campaigns/morgansfort/characters/alice.md`
+
+mkdirSync(nodePath(CHAR_DIR), { recursive: true })
+mkdirSync(nodePath(`${ROOT}/.runtime`), { recursive: true })
+writeFileSync(nodePath(MARKER), JSON.stringify({ name: 'stage2-test' }), 'utf8')
+writeFileSync(nodePath(`${CAMPAIGN}/calendar.json`), JSON.stringify({
+  day: 2, month: 3, year: 1247, hour: 8, month_length: 30,
+  months: ['Frostride', 'Thawmonth', 'Seedfall', 'Rainmonth', 'Bloomtide', 'Highsun',
+    'Fireseek', 'Sunswane', 'Harvestmoot', 'Leafall', 'Frostmoot', 'Sunwane'],
+  day_names: [], events: [],
+}, null, 2) + '\n', 'utf8')
+
+// The character fixture, born through the SAME validated write path the tools
+// use. xpNext is a stored field, so the XP-progress cases have a threshold.
+{
+  const CAL = JSON.parse(readFileSync(nodePath(`${CAMPAIGN}/calendar.json`), 'utf8'))
+  const { refused, reason } = await writeCharacter(fs, CHAR_DIR, 'alice', {
+    state: {
+      name: 'Alice',
+      identity: { level: 1, xp: 0, xpNext: 300 },
+      combat: { hp: { current: 5, max: 8 }, tempHp: 0 },
+      currency: 785,
+      spellSlots: { 1: { total: 2, used: 1 } },
+      equipment: {
+        gear: {
+          'Spellbook (arcane focus)': 1,
+          Robe: 1,
+          'Book (history)': 1,
+          Parchment: 8,
+          "Calligrapher's Supplies": 1,
+          "Scholar's pack": 1,
+        },
+      },
+    },
+    narrative: 'A tidy wizard in a grey robe, fond of parchment.\n',
+    player: 'scenario',
+    campaign: 'stage2-test',
+    calendar: CAL,
+  })
+  if (refused) {
+    console.error('write-tools.scenario: the fixture itself is invalid: ' + reason)
+    process.exit(1)
+  }
+}
 
 const sha = (p) => createHash('sha256').update(readFileSync(nodePath(p))).digest('hex')
 const ctx = { get: (n) => (n === 'fs' ? fs : undefined) }
@@ -103,36 +166,7 @@ function resetFixture({ currency = 785, hp = 5, maxHp = 8, xp = 0, used = 1 } = 
   writeState(s)
 }
 
-const realBefore = sha(REAL)
-// The real character's state file may or may not exist, depending on whether
-// that character has been migrated. Snapshot whichever is true and require it
-// unchanged, rather than asserting one particular arrangement.
-const REAL_STATE = `${ROOT}/campaigns/morgansfort/characters/alice.state.json`
-const realStateExistedBefore = existsSync(nodePath(REAL_STATE))
-const realStateBefore = realStateExistedBefore ? sha(REAL_STATE) : null
-
-// The whole live campaign character directory, hashed before and after.
-//
-// Hashes say "these bytes did not move" without this script ever asserting what
-// those bytes contain, so migrating a character, renaming one, or changing a
-// number is invisible here. That is the point: the invariant is "THIS RUN WROTE
-// NOTHING", not "the campaign looks the way it looked when this was written".
-//
-// It is also strictly stronger than watching alice's two files: a stray write
-// to any OTHER character under the live campaign now fails this run.
-const LIVE_CHAR_DIR = `${ROOT}/campaigns/morgansfort/characters`
-const liveDirBefore = snapshotTree(LIVE_CHAR_DIR)
-
-// Read and restore the marker as BYTES, not as text. `readFileSync(_, 'utf8')`
-// strips the BOM while decoding, so writing that string back silently removes
-// it — the file reads the same and is not the same file. This marker carries a
-// BOM in the real installation, and it is exactly the byte sequence that made
-// an earlier build report "no active campaign", so it must survive intact.
-const markerBefore = readFileSync(nodePath(MARKER))
-
 try {
-  // Point the marker at the throwaway campaign.
-  writeFileSync(nodePath(MARKER), JSON.stringify({ name: 'stage2-test' }), 'utf8')
 
   // --- dnd_spend: the affordable case ------------------------------------
   section('dnd_spend — affordable')
@@ -305,31 +339,70 @@ try {
   check(sha(STATE) === beforeOveruse, 'the file is byte-identical after the refusal')
   check(readState().equipment.gear.Parchment === 6, 'the count did not move')
 
-  // --- dnd_xp_add --------------------------------------------------------
-  section('dnd_xp_add')
+  // --- dnd_track currency: the credit route for dnd_loot ----------------
+  section('dnd_track — currency')
+  resetFixture({ currency: 15 })
+  out = await call('dnd_track', { currency: '+103 gp', reason: 'loot split' })
+  check(readState().currency === 15 + 10300, 'loot credited in copper: 15 gp + 103 gp, got ' + readState().currency)
+  check(/Purse/.test(out) && /-> 103 gp 1 sp 5 cp/.test(out), 'reports the purse movement: ' + JSON.stringify(out))
+
+  out = await call('dnd_track', { currency: '-104 gp 6 sp' })
+  check(/REFUSED/.test(out) && /Short by/.test(out), 'a debit below zero is refused with the shortfall: ' + JSON.stringify(out))
+  check(readState().currency === 15 + 10300, 'the purse did not move on the refused debit')
+
+  out = await call('dnd_track', { currency: '=50 gp' })
+  check(readState().currency === 5000, 'absolute set works, got ' + readState().currency)
+
+  out = await call('dnd_track', { currency: 'banana' })
+  check(/could not read currency/.test(out), 'an unparseable currency is refused: ' + JSON.stringify(out))
+
+  // --- dnd_track xp ------------------------------------------------------
+  // dnd_xp_add was folded into dnd_track: the xp change now reports the level
+  // progress from the stored `xpNext` right in its change list.
+  section('dnd_track — xp and level progress')
   resetFixture({ xp: 0 })
-  out = await call('dnd_xp_add', { amount: '250', reason: 'goblin ambush' })
+  out = await call('dnd_track', { xp: '+250', reason: 'goblin ambush' })
   check(readState().identity.xp === 250, 'XP awarded, got ' + readState().identity.xp)
-  check(/250 XP/.test(out), 'reports the award: ' + JSON.stringify(out))
+  check(/XP 0 -> 250/.test(out), 'reports the award: ' + JSON.stringify(out))
   check(/50 XP until level 2/.test(out), 'reports the remainder to the next level: ' + JSON.stringify(out))
 
-  out = await call('dnd_xp_add', { amount: '50' })
+  out = await call('dnd_track', { xp: '+50' })
   check(/Ready to advance to level 2/.test(out), 'reports readiness at the threshold: ' + JSON.stringify(out))
   check(readState().identity.level === 1, 'but does NOT level the character up, level is ' + readState().identity.level)
 
   const beforeNegXp = sha(STATE)
-  out = await call('dnd_xp_add', { amount: '-9999' })
+  out = await call('dnd_track', { xp: '-9999' })
   check(/REFUSED/.test(out), 'removing more XP than exists is refused: ' + JSON.stringify(out))
   check(sha(STATE) === beforeNegXp, 'the file is byte-identical after the refusal')
 
-  out = await call('dnd_xp_add', {})
-  check(/needs an `amount`/.test(out), 'a missing amount is reported: ' + JSON.stringify(out))
+  out = await call('dnd_track', {})
+  check(/needs at least one of/.test(out), 'a call with no change field is refused: ' + JSON.stringify(out))
+
+  // --- learning spells is a track change, not a hand edit ----------------
+  section('dnd_track — spell lists')
+  resetFixture()
+  out = await call('dnd_track', { spells: 'spellbook:+Fireball,prepared:+Fireball' })
+  const afterLearn = readState()
+  check(afterLearn.spells?.spellbook?.includes('Fireball') === true, 'Fireball learned into the spellbook')
+  check(afterLearn.spells?.prepared?.includes('Fireball') === true, 'Fireball prepared in the same call')
+  check(/Spell learned: Fireball/.test(out), 'reports each learning: ' + JSON.stringify(out))
+
+  out = await call('dnd_track', { spells: 'spellbook:+Fireball' })
+  check(/already knows/.test(out), 'learning a known spell is refused: ' + JSON.stringify(out))
+
+  out = await call('dnd_track', { spells: 'prepared:-Fireball,spellbook:-Fireball' })
+  const afterDrop = readState()
+  check(afterDrop.spells?.spellbook?.includes('Fireball') !== true
+    && afterDrop.spells?.prepared?.includes('Fireball') !== true, 'both lists dropped Fireball')
+
+  out = await call('dnd_track', { spells: 'pages:+Fireball' })
+  check(/could not read spells entry/.test(out), 'an unknown list is refused: ' + JSON.stringify(out))
 
   // --- idempotency for xp and track too ---------------------------------
-  section('idempotency across all three tools')
+  section('idempotency across the write tools')
   resetFixture({ xp: 0 })
-  await call('dnd_xp_add', { amount: '100', key: 'session-4' })
-  await call('dnd_xp_add', { amount: '100', key: 'session-4' })
+  await call('dnd_track', { xp: '+100', key: 'session-4' })
+  await call('dnd_track', { xp: '+100', key: 'session-4' })
   check(readState().identity.xp === 100, 'xp is not awarded twice for one key, got ' + readState().identity.xp)
 
   resetFixture({ hp: 8, maxHp: 8 })
@@ -383,36 +456,17 @@ try {
   const generatedCount = (sheetThird.match(/<!-- dsh-dnd:generated -->/g) ?? []).length
   check(generatedCount === 1, `exactly one generated block exists, found ${generatedCount}`)
 } finally {
-  writeFileSync(nodePath(MARKER), markerBefore)
-
-  // Restore the fixture so the suite is repeatable.
+  // The marker is a temp file this script wrote; nothing to restore. The
+  // fixture is reset so the assertions stay repeatable.
   resetFixture()
+  process.env.DND_ROOT = savedRoot
 }
 
-section('the real campaign was never touched')
-check(sha(REAL) === realBefore, 'morgansfort/alice.md is byte-identical')
-check(existsSync(nodePath(MARKER)), 'the active-campaign marker still exists')
-check(readFileSync(nodePath(MARKER)).equals(markerBefore), 'the marker was restored byte-for-byte, BOM included')
-check(JSON.parse(readFileSync(nodePath(MARKER), 'utf8').replace(/^\uFEFF/, '')).name === 'morgansfort',
-  'and the real campaign is active again')
-
-// The invariant is "this run changed nothing in the real campaign", not "the
-// real character has no state file". The earlier assertion hardcoded the
-// latter, which was true until that character was migrated with the operator's
-// consent — at which point it failed while the real invariant still held.
-// Hash both files instead, so the check survives any legitimate change to how
-// the campaign is stored.
-check(existsSync(nodePath(REAL_STATE)) === realStateExistedBefore,
-  `the real character's state file was ${realStateExistedBefore ? 'present' : 'absent'} and still is`)
-if (realStateExistedBefore) {
-  check(sha(REAL_STATE) === realStateBefore, 'and it is byte-identical')
-}
-
-// The whole-directory check: catches a stray write to any other character too.
-const liveDirChanges = diffTree(liveDirBefore, snapshotTree(LIVE_CHAR_DIR))
-check(liveDirChanges.length === 0,
-  'nothing under campaigns/morgansfort/characters moved'
-  + (liveDirChanges.length > 0 ? ' — ' + liveDirChanges.join('; ') : ' (whole tree hashed)'))
+section('the workspace stayed inside the temp tree')
+check(existsSync(nodePath(MARKER)), 'the active-campaign marker exists in the temp workspace')
+check(JSON.parse(readFileSync(nodePath(MARKER), 'utf8').replace(/^\uFEFF/, '')).name === 'stage2-test',
+  'and the throwaway campaign is the active one')
+check(readState().currency === 785, 'the fixture was restored for repeatability')
 
 console.log('')
 if (failures > 0) {
