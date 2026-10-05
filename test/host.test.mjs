@@ -336,7 +336,9 @@ await test('dnd_attack parses compound damage terms', async () => {
   let sawHit = false
   for (let i = 0; i < 200 && !sawHit; i += 1) {
     const out = await call('dnd_attack', { toHit: 20, ac: 5, damage: '1d4+3+1d6' })
-    if (!out.includes('MISS')) {
+    // A natural 20 doubles the dice, so the report says "2d4" — this test pins
+    // the PLAIN hit. Skipping crits here is the fix for a one-in-twenty flake.
+    if (!out.includes('MISS') && !out.includes('CRITICAL')) {
       sawHit = true
       assert.match(out, /Damage 1d4[^\n]*\*\*\d+\*\*/, out)
       assert.ok(!/unparseable/.test(out), out)
@@ -354,7 +356,7 @@ await test('dnd_track hp reports the overflow instead of dropping it', async () 
   applyTrackChanges(dying, { hp: '-8' }, changes)
   assert.equal(dying.combat.hp.current, 0)
   // 3 HP absorb part of the 8 damage; the overflow past 0 is what is reported.
-  assert.match(changes[0], /clamped from -5/)
+  assert.match(changes[0], /HP 3 -> 0/)
   assert.match(changes[0], /Overflow damage: 5/)
   assert.match(changes[0], /no massive-damage death/)
 

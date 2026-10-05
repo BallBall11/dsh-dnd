@@ -213,7 +213,9 @@ try {
   resetFixture({ hp: 5, maxHp: 8 })
   out = await call('dnd_track', { hp: '-20' })
   check(readState().combat.hp.current === 0, 'damage below 0 clamps to 0, got ' + readState().combat.hp.current)
-  check(/clamped/.test(out), 'and says it clamped: ' + JSON.stringify(out))
+  // The landing report names the overflow (the massive-damage input), not the
+  // internal clamp — wording changed when temp HP absorption moved in.
+  check(/Overflow damage: 15/.test(out), 'and reports the overflow: ' + JSON.stringify(out))
 
   resetFixture({ hp: 5, maxHp: 8 })
   out = await call('dnd_track', { hp: '+20' })

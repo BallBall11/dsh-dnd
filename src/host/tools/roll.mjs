@@ -1,13 +1,22 @@
 /**
  * tools/roll.mjs — dice, table resolution, and 2024 weapon mastery.
  *
- * Pure computation: no fs, no state writes, no campaign reads. These are the
- * tools worth having as natives, because each one replaces a shell round-trip
- * to a Python script whose stdout would then have to be parsed.
+ * Pure computation: no fs, no state writes, no campaign reads — with ONE
+ * deliberate exception. `dnd_attack` takes an optional `target`; when the
+ * caller names one and the attack hits, the damage is LANDED through the
+ * validated write path (track.mjs's `locateAndApply`, the same lock,
+ * idempotency-key and diagnosis machinery every write tool uses). Without a
+ * `target` the tool stays pure. The exception exists because an agent playing
+ * the DM resolves an attack as ONE event — roll, hit, damage, blood — and a
+ * second round-trip through dnd_track re-reads what the roll just reported,
+ * inviting transcription errors between the two calls. The rules of landing
+ * damage live in apply-damage.mjs, shared with dnd_track; this module only
+ * decides WHEN they run.
  *
  *   dnd_roll     NdM±X with advantage/disadvantage and kh/kl keep-highest
  *   dnd_check    d20 + mod vs DC
- *   dnd_attack   d20 + toHit vs AC, damage on a hit, doubled dice on a crit
+ *   dnd_attack   d20 + toHit vs AC, damage on a hit, doubled dice on a crit;
+ *                optional `target` lands the damage on the character
  *   dnd_save     d20 + mod vs DC
  *   dnd_mastery  2024 weapon mastery property reference
  *   dnd_dc       common DC ladder / passive score
@@ -15,6 +24,10 @@
  * The skill's dice.py remains authoritative for the physical-dice ritual and
  * --player routing; these are for table math the DM resolves directly.
  */
+
+import { locateAndApply } from './track.mjs'
+import { applyDamage, isEnemyTag } from './apply-damage.mjs'
+import { sessionOf, writePolicyFor } from './session-scope.mjs'
 
 export const name = 'dnd-roll'
 
@@ -212,7 +225,7 @@ export const DC_LADDER = [
  * @param _ctx - host context; this module is pure computation and needs none.
  * @returns an array of tool definitions.
  */
-export function buildTools(_ctx) {
+export function buildTools(ctx) {
   const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
   const dice = {
@@ -277,7 +290,9 @@ export function buildTools(_ctx) {
 
   const attack = {
     name: 'dnd_attack',
-    description: 'Resolve an attack: d20 + toHit vs AC; on a hit roll the damage dice. A natural 20 is a critical hit and doubles the damage DICE (not the modifier).',
+    description: 'Resolve an attack: d20 + toHit vs AC; on a hit roll the damage dice. A natural 20 is a critical hit and doubles the damage DICE (not the modifier). '
+      + 'Pass `target` to LAND the damage on a character in the active campaign when it hits: temp HP absorbs first, resistance/vulnerability apply, and an enemy reduced to 0 HP is marked dead. '
+      + 'Without `target` nothing is written.',
     parameters: {
       type: 'object',
       properties: {
@@ -287,11 +302,16 @@ export function buildTools(_ctx) {
         advantage: { type: 'boolean', description: 'Roll the d20 twice, take the higher.' },
         disadvantage: { type: 'boolean', description: 'Roll the d20 twice, take the lower.' },
         label: { type: 'string', description: 'Short label, e.g. "Shocking Grasp".' },
+        target: { type: 'string', description: 'Character name to apply the damage to on a hit. Omit for a pure roll.' },
+        damageType: { type: 'string', description: 'The damage type, e.g. "fire". Only read with `target`; matches resistance/vulnerability.' },
+        resistance: { type: 'string', description: 'Damage type the target resists (halved), e.g. "fire". Only read with `target`.' },
+        vulnerability: { type: 'string', description: 'Damage type the target is vulnerable to (doubled). Only read with `target`.' },
+        key: { type: 'string', description: 'Idempotency key for the applied damage. A retry with the same key does not land the damage twice.' },
       },
       required: ['toHit', 'ac'],
     },
     output: { schema: { type: 'string' }, render: renderText },
-    async execute(args) {
+    async execute(args, exec) {
       const toHit = Number(args.toHit)
       const ac = Number(args.ac)
       if (!Number.isFinite(toHit) || !Number.isFinite(ac)) return '`toHit` and `ac` must be numbers.'
@@ -300,7 +320,11 @@ export function buildTools(_ctx) {
       const hit = (roll.total >= ac || critical) && !roll.isNat1
       let out = `${rollHead(args.label, roll, toHit)} vs AC ${ac} → ${hit ? (critical ? 'CRITICAL HIT!' : 'HIT') : 'MISS'}`
       if (critical && roll.total < ac) out += ' (nat 20 always hits)'
-      if (!hit || !args.damage) return out
+      const target = args.target === undefined || String(args.target).trim() === '' ? null : String(args.target).trim()
+      if (!hit || !args.damage) {
+        if (target !== null && hit) return `${out}\n(no \`damage\` expression given; nothing was applied to ${target})`
+        return out
+      }
       const chain = parseDiceChain(args.damage)
       if (chain === null) return `${out}\n(unparseable damage expression: "${args.damage}")`
       // On a crit, EVERY damage die rolls twice and modifiers apply once —
@@ -316,7 +340,52 @@ export function buildTools(_ctx) {
       }
       const damage = rollDiceChain(chain)
       out += `\nDamage ${damage.text}${critical ? ' (crit: dice doubled)' : ''}`
-      return out
+      if (target === null) return out
+
+      // Land the rolled total on the named character through the shared write
+      // path. A miss never reaches here, so nothing is written on a miss.
+      const fs = ctx === undefined ? undefined : ctx.get?.('fs')
+      if (fs === undefined) return `${out}\n(fs service unavailable; the damage was NOT applied to ${target})`
+      let landedNote = null
+      let verdict = null
+      const outcome = await locateAndApply(fs, target, (located, state) => {
+        const landed = applyDamage(state.combat, damage.total, {
+          type: args.damageType,
+          resistance: args.resistance,
+          vulnerability: args.vulnerability,
+        })
+        if (landed.error !== undefined) {
+          return { refuse: `dnd_attack: ${landed.error}. Nothing was written.` }
+        }
+        state.combat = landed.combat
+        landedNote = landed.note
+        const enemy = isEnemyTag(located.character.metadata?.tags)
+        if (landed.dead && enemy) {
+          // A hostile card at 0 HP is defeated: marked so the panel shows it
+          // down and the DM agent narrates the kill. Death saves are a PC
+          // ritual; an enemy never gets them.
+          state.conditions = [...(Array.isArray(state.conditions) ? state.conditions : []), 'dead']
+          verdict = 'DEFEATED — marked dead'
+        } else if (landed.dead) {
+          verdict = 'the character is dying — death saves start'
+        } else if (landed.overflow > 0) {
+          verdict = 'still standing (the pool absorbed the overflow)'
+        } else {
+          verdict = 'still standing'
+        }
+        return undefined
+      }, {
+        key: args.key,
+        sandboxPolicy: writePolicyFor(ctx, exec),
+        session: sessionOf(ctx, exec),
+        describe: (state, located) => {
+          const hp = state.combat?.hp ?? {}
+          return `Applied to ${located.name}: ${landedNote ?? 'no change'}. `
+            + `HP now ${hp.current ?? '?'}/${hp.max ?? '?'}. ${verdict}.`
+        },
+      })
+      if (outcome.error !== undefined) return `${out}\n${outcome.error}`
+      return `${out}\n${outcome.result.text}`
     },
   }
 

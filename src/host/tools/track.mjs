@@ -74,6 +74,7 @@
  */
 
 import { activeCampaignDir, readTextOrUndefined } from './shared.mjs'
+import { applyDamage } from './apply-damage.mjs'
 import { readCalendar } from './clock.mjs'
 import { readCharacter, writeCharacter, listCharacters, statePath } from './state-io.mjs'
 import { formatCurrency, formatCurrencyShort, toCopper, formatFindings } from './state-rules.mjs'
@@ -325,7 +326,7 @@ async function withCharacterLock(key, work) {
  *   takes. `describe` is called with `(state, located)`.
  * @returns `{ result }` or `{ error }`.
  */
-async function locateAndApply(fs, requested, mutate, options = {}) {
+export async function locateAndApply(fs, requested, mutate, options = {}) {
   // Resolve the character to a stem OUTSIDE the lock, purely to build a stable
   // key. This is a directory-level read, not a state read.
   const located0 = await locateCharacter(fs, requested, options.session)
@@ -523,7 +524,7 @@ export function buildTools(ctx) {
     description:
       'Award or remove experience and write it to the character. '
       + 'Reports the new total and how much remains until the next level. '
-      + 'It does NOT level the character up: advancement changes HP, slots, proficiencies and features, which is a rules decision the DM makes explicitly. '
+      + 'It does NOT level the character up: advancement changes HP, slots, proficiencies and features, which is a rules decision the DM makes explicitly — dnd_level_up plans and applies it. '
       + 'Pass `key` to make a retry safe.',
     parameters: {
       type: 'object',
@@ -573,7 +574,7 @@ export function buildTools(ctx) {
             const remaining = report.next - report.after
             text += remaining > 0
               ? ` ${remaining} XP until level ${numOr(state.identity.level, 1) + 1} (at ${report.next}).`
-              : ` Ready to advance to level ${numOr(state.identity.level, 1) + 1} at ${report.next} XP — level up is a separate, explicit step.`
+              : ` Ready to advance to level ${numOr(state.identity.level, 1) + 1} at ${report.next} XP — dnd_level_up plans and applies the step.`
           }
           return text
         },
@@ -604,23 +605,27 @@ export function applyTrackChanges(state, args, changes) {
     const max = numOrNull(state.combat?.hp?.max)
     const current = numOr(state.combat?.hp?.current, 0)
     const next = op.mode === 'set' ? op.value : current + op.value
-    if (next < 0) {
-      // Damage that takes a character below 0 is not an error at the table —
-      // 0 is the floor and the death saves start. Reporting the clamp AND the
-      // overflow keeps the DM informed: the overflow decides the massive-damage
-      // instant-death rule (remaining damage >= HP max means dead outright),
-      // and silently dropping it used to discard exactly the number that rule
-      // needs.
-      const overflow = -next
+    if (op.mode === 'add' && op.value < 0) {
+      // Damage goes through the shared landing rules: temporary HP absorbs
+      // first, the remainder reaches hp.current. Before this funneled through
+      // applyDamage, temp HP sat unspent while the real pool drained — a
+      // character silently tougher than the rules allow.
+      const landed = applyDamage(state.combat, -op.value)
+      if (landed.error !== undefined) return { refuse: `dnd_track: ${landed.error}. Nothing was written.` }
+      state.combat = landed.combat
+      const overflow = landed.overflow
       const instantDeath = max !== null && overflow >= max
-      changes.push(`HP ${current} -> 0 (clamped from ${next}; 0 is the floor, and the character is dying. `
+      changes.push(`Damage ${-op.value} landed${landed.absorbed > 0 ? ` (temp HP absorbed ${landed.absorbed})` : ''}: `
+        + `HP ${current} -> ${landed.combat.hp.current}. `
+        + `0 is the floor${landed.combat.hp.current === 0 ? ', and the character is dying' : ''}. `
         + `Overflow damage: ${overflow}`
         + (max !== null
           ? instantDeath ? ` >= HP max ${max} — INSTANT DEATH by the massive-damage rule`
             : ` < HP max ${max}, no massive-damage death`
-          : '') + ')')
-      state.combat = { ...state.combat, hp: { ...(state.combat?.hp ?? {}), current: 0 } }
+          : ''))
       touched.push('hp')
+    } else if (next < 0) {
+      return { refuse: `dnd_track: setting HP to ${next} would go below the floor of 0. Nothing was written.` }
     } else if (max !== null && next > max) {
       changes.push(`HP ${current} -> ${max} (clamped from ${next}; the maximum is ${max})`)
       state.combat = { ...state.combat, hp: { ...(state.combat?.hp ?? {}), current: max } }
