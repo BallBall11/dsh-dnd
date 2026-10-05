@@ -201,7 +201,9 @@ function useCharacters(open) {
     if (!open) return undefined
     let cancelled = false
     const load = () => {
-      fetch(DND_API + '/characters', { cache: 'no-store' })
+      // `include=enemies` brings the hostile cards alongside the party; the
+      // Host formats them (real HP, AC, live conditions) exactly like the PCs.
+      fetch(DND_API + '/characters?include=enemies', { cache: 'no-store' })
         .then(async (res) => ({ status: res.status, body: await res.json() }))
         .catch((error) => ({ status: 0, body: { error: String(error && error.message ? error.message : error) } }))
         .then((result) => { if (!cancelled) setState({ phase: 'done', ...result }) })
@@ -574,6 +576,36 @@ function Character({ character, meta, ruleset }) {
     React.createElement(Findings, { findings: character.findings }))
 }
 
+/**
+ * One hostile card: the combat read the players plan with. Real HP on a
+ * coloured band, AC and the live conditions — including the `dead` mark
+ * dnd_attack leaves at 0 HP — but none of the PC-only sections (purse,
+ * spellbook, equipment). It renders what the Host sends and computes nothing.
+ */
+function EnemyCard({ enemy }) {
+  const st = enemy.state
+  if (st === null || st === undefined) {
+    return React.createElement('div', { className: 'dnd-err' },
+      enemy.name + '：' + (enemy.error ?? '无法读取状态'))
+  }
+  const combat = st.combat ?? {}
+  const conditions = (enemy.display && enemy.display.conditions) || []
+  const dead = conditions.includes('dead')
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'dnd-head' },
+      React.createElement('div', null,
+        React.createElement('div', { className: 'dnd-name' }, st.name ?? enemy.name),
+        conditions.length > 0
+          ? React.createElement('div', { className: 'dnd-sub' }, conditions.join('、'))
+          : null),
+      dead ? React.createElement('span', { className: 'dnd-tag' }, '已倒下') : null),
+    React.createElement(HitPoints, { combat }),
+    React.createElement('div', { className: 'dnd-row', style: { marginTop: '6px' } },
+      React.createElement('span', null, '护甲 AC'),
+      React.createElement('span', null, combat.ac ?? '—')),
+    React.createElement(Findings, { findings: enemy.findings }))
+}
+
 /** Render the transport result; every branch is an outcome a DM might hit. */
 function Body({ result, meta }) {
   if (result.phase === 'loading') return React.createElement('div', { className: 'dnd-muted' }, '读取中…')
@@ -589,8 +621,9 @@ function Body({ result, meta }) {
   }
 
   const characters = (result.body && result.body.characters) || []
+  const enemies = (result.body && result.body.enemies) || []
   const warnings = (result.body && result.body.warnings) || []
-  if (characters.length === 0) {
+  if (characters.length === 0 && enemies.length === 0) {
     return React.createElement('div', null,
       React.createElement('div', { className: 'dnd-muted' },
         '战役 ' + result.body.campaign + ' 没有角色'),
@@ -598,13 +631,24 @@ function Body({ result, meta }) {
   }
 
   return React.createElement('div', null,
-    React.createElement('div', { className: 'dnd-party' },
-      // `meta` arrives as a PROP from Overlay (useMeta's fetch), never on the
-      // transport result — the earlier version read result.meta, which is
-      // always undefined, so every card silently rendered without its
-      // Chinese names and combat lines.
-      ...characters.map((c) => React.createElement('div', { key: c.name },
-        React.createElement(Character, { character: c, meta, ruleset: result.body.ruleset ?? '2014' })))),
+    characters.length > 0
+      ? React.createElement('div', { className: 'dnd-party' },
+        // `meta` arrives as a PROP from Overlay (useMeta's fetch), never on the
+        // transport result — the earlier version read result.meta, which is
+        // always undefined, so every card silently rendered without its
+        // Chinese names and combat lines.
+        ...characters.map((c) => React.createElement('div', { key: c.name },
+          React.createElement(Character, { character: c, meta, ruleset: result.body.ruleset ?? '2014' }))))
+      : React.createElement('div', { className: 'dnd-muted' }, '战役 ' + result.body.campaign + ' 没有玩家角色'),
+    // The encounter section: hostile cards in the same responsive columns,
+    // shown only when the campaign has enemies at all.
+    enemies.length > 0
+      ? React.createElement('div', null,
+        React.createElement('div', { className: 'dnd-sec', style: { marginTop: '14px' } }, '敌人'),
+        React.createElement('div', { className: 'dnd-party' },
+          ...enemies.map((e) => React.createElement('div', { key: e.name },
+            React.createElement(EnemyCard, { enemy: e })))))
+      : null,
     ...warnings.map((w, i) => React.createElement('div', { key: 'gw' + i, className: 'dnd-warn' }, w)))
 }
 

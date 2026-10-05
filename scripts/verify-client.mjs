@@ -98,8 +98,28 @@ const CHARACTER_PAYLOAD = {
     display: { currency: '8 gp 0 sp 0 cp', hp: '24/28', level: 3, class: 'Fighter', race: 'Human' },
     findings: [],
   }],
+  // The hostile cards: include=enemies shape (GAP plan, project 2). The
+  // enemy's combat read — real hp, AC, the live `dead` condition — is what
+  // the panel's enemy section must render.
+  enemies: [{
+    name: 'goblin-1',
+    hasStateFile: true,
+    needsMigration: false,
+    state: {
+      name: 'Goblin Warrior',
+      identity: { race: null, class: null, level: 2 },
+      abilities: { STR: 8, DEX: 15, CON: 10, INT: 10, WIS: 8, CHA: 8 },
+      combat: { hp: { current: 0, max: 10 }, tempHp: 0, ac: 15 },
+      spellcasting: { saveDC: null, attackBonus: null },
+      spellSlots: {},
+      skills: {},
+    },
+    display: { currency: '0 cp', hp: { current: 0, max: 10 }, level: 2, class: null, race: null, conditions: ['dead'], ac: 15 },
+    tags: ['enemy'],
+    findings: [],
+  }],
   warnings: [],
-  counts: { characters: 1, needsMigration: 0 },
+  counts: { characters: 1, needsMigration: 0, enemies: 1 },
 }
 globalThis.fetch = () => Promise.resolve({
   status: 200,
@@ -335,6 +355,8 @@ if (typeof bySlot['shell.overlay']?.component === 'function') {
       `the panel never built a Character (saw: ${seen.join(', ')})`)
     ok(seen.some((n) => n === 'HitPoints' || n === 'AbilityGrid'),
       `the open overlay rendered no character detail (saw: ${seen.join(', ') || 'nothing'})`)
+    ok(seen.includes('EnemyCard'),
+      `the open overlay rendered no EnemyCard — the enemy section was never built (saw: ${seen.join(', ')})`)
   } catch (error) {
     failures.push('overlay component threw when OPEN with data: ' + error.message)
   }

@@ -143,6 +143,19 @@ writeFileSync(nodePath(`${campaignsDir}/alpha/characters/broken.state.json`), JS
   currency: 10,
 }), 'utf8')
 
+// A hostile card: kind lives in the frontmatter tags, numbers in the state
+// file — the same split every character uses.
+writeFileSync(nodePath(`${campaignsDir}/alpha/characters/goblin.md`),
+  '---\nplayer: null\ncampaign: alpha\nupdated: 2026-10-04\ntags: [enemy]\n---\n\n# Goblin\n\n## Features & Traits\n\n- Nimble Escape\n', 'utf8')
+writeFileSync(nodePath(`${campaignsDir}/alpha/characters/goblin.state.json`), JSON.stringify({
+  schema: 1, name: 'Goblin',
+  identity: { level: null, class: null, race: null },
+  abilities: { STR: 8, DEX: 14, CON: 10, INT: 10, WIS: 8, CHA: 8 },
+  combat: { hp: { current: 4, max: 7 }, tempHp: 0, ac: 15 },
+  conditions: ['dead'],
+  currency: 0,
+}), 'utf8')
+
 /** Point the active-campaign marker at a campaign name. */
 function activate(name) {
   writeFileSync(nodePath(`${runtimeDir}/active-campaign.json`), JSON.stringify({ name }), 'utf8')
@@ -241,6 +254,26 @@ await test('the response carries the campaign ruleset and sheet features', async
   assert.equal(alice.features[0].name, 'Ritual Casting')
   assert.match(alice.features[0].text, /仪式/)
   assert.equal(alice.features[1].name, 'Fey Ancestry (精灵血脉)')
+})
+
+await test('the default response stays PC-only when an enemy is present', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters`)).json()
+  assert.equal(body.enemies, undefined, 'no enemies key without the query — old clients read the same shape')
+  assert.ok(!body.characters.some((c) => c.name === 'goblin'), 'the enemy never joins the party list')
+  assert.equal(body.counts.enemies, 0, 'no query, no enemies counted')
+})
+
+await test('?include=enemies adds hostile cards with the combat read', async () => {
+  const body = await (await fetch(`${srv.url}${API_PREFIX}/characters?include=enemies`)).json()
+  assert.ok(Array.isArray(body.enemies), 'enemies must be an array under the query')
+  assert.equal(body.counts.enemies, 1, JSON.stringify(body.counts))
+  const goblin = body.enemies.find((c) => c.name === 'goblin')
+  assert.ok(goblin !== undefined, JSON.stringify(body.enemies.map((c) => c.name)))
+  assert.deepEqual(goblin.display.hp, { current: 4, max: 7 }, 'the players plan with REAL hp')
+  assert.equal(goblin.display.ac, 15)
+  assert.deepEqual(goblin.display.conditions, ['dead'], 'the dead mark dnd_attack leaves must reach the panel')
+  assert.equal(goblin.features, undefined, 'an enemy card carries no PC feature section')
+  assert.ok(!body.characters.some((c) => c.name === 'goblin'), 'the enemy still stays out of the party list')
 })
 
 await test('GET /dnd/meta serves the display index the panel renders against', async () => {

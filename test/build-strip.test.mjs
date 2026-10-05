@@ -78,7 +78,9 @@ test('the loader contract survived stripping', () => {
 })
 
 test('the fetch call survived stripping', () => {
-  assert.ok(bundle.includes("fetch(DND_API + '/characters'"), 'the request must still be made')
+  // The query rides the same route (the enemy section option), so the literal
+  // is the route + query, not the bare path.
+  assert.ok(bundle.includes("fetch(DND_API + '/characters?include=enemies'"), 'the request must still be made')
   assert.ok(bundle.includes("cache: 'no-store'"), 'the cache option must survive')
 })
 

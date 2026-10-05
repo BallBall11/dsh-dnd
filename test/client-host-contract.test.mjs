@@ -45,7 +45,11 @@ test('every client fetch targets a declared host route', () => {
   const calls = [...panel.matchAll(/fetch\(\s*DND_API \+ '([^']+)'/g)].map((m) => API_PREFIX + m[1])
   assert.ok(calls.length > 0, 'expected at least one fetch call')
   for (const call of calls) {
-    assert.ok(declared.includes(call),
+    // Query parameters ride ON a declared route (`/dnd/characters?include=`
+    // is the characters route carrying an option), so the comparison strips
+    // the query and checks the PATH. An undeclared path is still a failure.
+    const path = call.split('?')[0]
+    assert.ok(declared.includes(path),
       `the client fetches ${call}, which the host does not declare. Declared: ${declared.join(', ')}`)
   }
 })
