@@ -36,13 +36,17 @@ export const name = 'dnd-rest'
 
 /**
  * Roll one Hit Die with the module's own dice, keeping the face value.
- * @param die - e.g. "d8". The die's shape was validated by rest-rules before
- *   this is ever called.
- * @returns the rolled face (1..sides), or 0 when the die is unparseable.
+ * @param sides - the die's SIDES (rest-rules's rollDie contract passes a
+ *   number, e.g. 10 for a d10). The earlier version treated it as a die
+ *   string and parsed "1" + 10 = "110", which parseDice rejects — every
+ *   Hit Dice roll silently fell back to 0 and short rests healed CON only.
+ * @returns the rolled face (1..sides). The die's shape was validated by
+ *   rest-rules before this is ever called; an unusable spec here is a
+ *   programming error, so it throws rather than healing for free.
  */
-function rollOne(die) {
-  const expr = parseDice(`1${die}`)
-  if (expr === null) return 0
+function rollOne(sides) {
+  const expr = parseDice(`1d${sides}`)
+  if (expr === null) throw new Error(`dnd_rest: unusable hit die sides "${sides}"`)
   return rollParsed(expr).total
 }
 

@@ -174,6 +174,15 @@ await test('a short rest lands HD spend and healing through the write path', asy
   const out = await rest.execute({ kind: 'short', character: 'Brann', hitDice: '2', key: 'rest-1' }, exec)
   assert.match(String(out), /SHORT rest/)
   assert.match(String(out), /Hit Dice remaining: 2 -> 0/)
+  // THE DICE MUST BE DICE. A regression rolled every Hit Die as 0 (the sides
+  // number was parsed as a die string), healing CON only — plausible-looking
+  // numbers that quietly under-heal every short rest. Each reported face must
+  // be a legal die face: >= 1, <= the die's sides.
+  for (const m of String(out).matchAll(/d(\d+) rolled (\d+)/g)) {
+    const [, sides, face] = m
+    const n = Number(face)
+    assert.ok(n >= 1 && n <= Number(sides), `Hit Die face ${n} outside 1..${sides}: ${out}`)
+  }
   const s = readState('brann')
   assert.equal(s.combat.hitDice.remaining, 0)
   // Brann is a Fighter (d10): 7 HP after damage, + two rolls and CON +2 each,

@@ -81,6 +81,48 @@ await test('fifteen monsters hit the x4 cap', async () => {
   assert.equal(out.multiplier, 4)
 })
 
+// ─── parseCr + dnd_loot: one concept, one format ───────────────────────────
+
+import { parseCr, buildTools } from '../src/host/tools/encounter.mjs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+const exec0 = { agent: { id: 'loot-1' } }
+
+await test('parseCr accepts the SRD fraction literals and bare numbers', async () => {
+  assert.equal(parseCr('1/4'), 0.25)
+  assert.equal(parseCr('1/2'), 0.5)
+  assert.equal(parseCr('1/8'), 0.125)
+  assert.equal(parseCr('2'), 2)
+  assert.equal(parseCr('0'), 0)
+  assert.equal(parseCr('banana'), null)
+  assert.equal(parseCr(undefined), null)
+})
+
+await test('dnd_loot accepts "1/4" exactly like dnd_encounter_difficulty', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'dnd-loot-')).replace(/\\/g, '/')
+  process.on('exit', () => { try { rmSync(root, { recursive: true, force: true }) } catch { /* gone */ } })
+  const fs = { get: () => undefined }
+  // Minimal fs shim: only the package's own data/ dir is read (READ-ONLY —
+  // the loot table is shipped reference data, not campaign state).
+  const DATA_DIR = new URL('../data/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1').replace(/\\/, '/')
+  const makeTarget = (d) => ({ displayPath: String(d) })
+  const shim = {
+    async resolve(p) { return makeTarget(p) },
+    async stat(t) { try { return { type: 'file' } } catch { return undefined } },
+    async readText(t) { return (await import('node:fs')).readFileSync(t.displayPath.replace('D:/DND/dsh-dnd-bundle/data', DATA_DIR), 'utf8') },
+  }
+  const ctx = { get: (n) => (n === 'fs' ? shim : undefined) }
+  const loot = buildTools(ctx).find((t) => t.name === 'dnd_loot')
+  const out = await loot.execute({ cr: '1/4', count: 2 }, exec0)
+  assert.match(String(out), /CR 1\/4 \(CR 0-4\)/, String(out))
+  assert.match(String(out), /\d+ gp = \d+ gp total/)
+  const refused = await loot.execute({ cr: 'banana' }, exec0)
+  assert.match(String(refused), /not a number >= 0/)
+  assert.match(String(refused), /Nothing was rolled/)
+})
+
 await test('an eight-member party sums its thresholds', async () => {
   const out = difficultyFor([5, 5, 5, 5, 5, 5, 5, 5], [{ cr: '5', count: 2 }])
   // 8 x 500 easy = 4000; deadly = 8800. 2 x 1800 x 1.5 = 5400 -> between

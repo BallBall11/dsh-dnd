@@ -4,6 +4,22 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/); versioning adheres to
 [SemVer](https://semver.org/).
 
+## [0.4.1] — 2026-10-05
+
+### Fixed
+
+- **`dnd_rest` short rests rolled every Hit Die as 0.** The tool's die
+  callback received the die's SIDES (e.g. `10`) but parsed it as a die
+  string, building `"1" + 10 = "110"`, which `parseDice` rejects — every
+  face fell back to 0 and short rests healed only the CON modifier, a
+  systematic under-heal that looked plausible. The face now goes through
+  `1d<sides>`; an unusable spec throws instead of healing for free, and the
+  suite asserts every reported face is within 1..sides.
+- **`dnd_loot` accepts fractional CR literals ("1/4", "1/2", "1/8").** It
+  used to demand `0.25` while its sibling `dnd_encounter_difficulty` asks
+  for `"1/4"` — one concept, two formats. A shared `parseCr` answers both;
+  bare numbers still pass.
+
 ## [0.4.0] — 2026-10-05
 
 ### Added
