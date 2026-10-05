@@ -4,7 +4,7 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/); versioning adheres to
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — 2026-10-05
 
 ### Added
 
