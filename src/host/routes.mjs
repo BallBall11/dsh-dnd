@@ -73,7 +73,8 @@ export function buildHandlers(ctx) {
     if (fs === undefined) return { error: 'fs service unavailable', status: 503 }
     const origin = routeRoot(ctx)
     // An unresolvable data root is an error the panel DISPLAYS, never a
-    // silently guessed directory (see shared.mjs: the D:/DND fallback is gone).
+    // silently guessed directory (see shared.mjs: the legacy literal-root
+    // fallback is gone).
     if (origin.error !== undefined) {
       return { error: origin.error, status: 503, warnings: origin.warnings ?? [] }
     }
