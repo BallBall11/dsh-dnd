@@ -18,6 +18,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Check committed lib/ is fresh
+        run: git diff --exit-code -- lib/
       - run: npm test
       - run: npm run verify
       - run: npm run test:writes
