@@ -1,6 +1,6 @@
 # dsh-dnd
 
-D&D for DSH — a bundle for the DeepSeek Harness **web** profile: twenty-one native
+D&D for DSH — a bundle for the DeepSeek Harness **web** profile: thirty-one native
 Host tools plus a Client character panel, backed by a two-file character model.
 
 Every number in a character has exactly one home. The structured state lives in
@@ -14,14 +14,14 @@ The SRD lookup datasets are derived from community-published, freely licensed
 copies of the official System Reference Documents. Nothing in `data/` is
 original content; each file records its own upstream in `_meta`.
 
-| File | Ruleset | Upstream | License |
-|------|---------|----------|---------|
-| `srd-2014.json` | 2014 (SRD 5.1) | [5e-bits/5e-database](https://github.com/5e-bits/5e-database) (structured API data) with [foundryvtt/dnd5e](https://github.com/foundryvtt/dnd5e); the `classes` array is additionally distilled from [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) | OGL 1.0a; structured distributions MIT |
-| `srd-2024.json` | 2024 (SRD 5.2) | [5e-bits/5e-database `src/2024/en`](https://github.com/5e-bits/5e-database/tree/main/src/2024/en) and [foundryvtt/dnd5e](https://github.com/foundryvtt/dnd5e) (`packs/_source`, MIT); `classes` and `features` are refreshed from the 5e-bits source by `scripts/refresh-2024-srd.mjs` | CC-BY-4.0 (Wizards of the Coast), via upstreams whose code is MIT |
-| `srd-2014-fulltext.json` | 2014 (SRD 5.1, full text) | [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) (`5esrd.json`, complete copy) | OGL 1.0a |
-| `supplemental.json` | — | hand-curated additions to the structured datasets | OGL 1.0a |
-| `srd-2024-renames.json` | 2014→2024 rename map | [Converting to SRD 5.2.1](https://media.dndbeyond.com/compendium-images/srd/guide/converting-to-srd-5.2.1.pdf) (Wizards of the Coast) | CC-BY-4.0 |
-| `i18n-zh.json` | — | hand-curated EN→CN display map, **calibrated against the [5etools-cn](https://github.com/tjliqy/5etools-cn/tree/cn2.0) terminology table** (site-curated glossary, ~650 spells + abilities/skills/conditions/weapons/features) | CN translations follow 5etools-cn's community glossary; game text remains OGL/CC-BY-4.0 |
+| File                     | Ruleset                   | Upstream                                                                                                                                                                                                                                                                               | License                                                                                 |
+| ------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `srd-2014.json`          | 2014 (SRD 5.1)            | [5e-bits/5e-database](https://github.com/5e-bits/5e-database) (structured API data) with [foundryvtt/dnd5e](https://github.com/foundryvtt/dnd5e); the `classes` array is additionally distilled from [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd)                     | OGL 1.0a; structured distributions MIT                                                  |
+| `srd-2024.json`          | 2024 (SRD 5.2)            | [5e-bits/5e-database `src/2024/en`](https://github.com/5e-bits/5e-database/tree/main/src/2024/en) and [foundryvtt/dnd5e](https://github.com/foundryvtt/dnd5e) (`packs/_source`, MIT); `classes` and `features` are refreshed from the 5e-bits source by `scripts/refresh-2024-srd.mjs` | CC-BY-4.0 (Wizards of the Coast), via upstreams whose code is MIT                       |
+| `srd-2014-fulltext.json` | 2014 (SRD 5.1, full text) | [BTMorton/dnd-5e-srd](https://github.com/BTMorton/dnd-5e-srd) (`5esrd.json`, complete copy)                                                                                                                                                                                            | OGL 1.0a                                                                                |
+| `supplemental.json`      | —                         | hand-curated additions to the structured datasets                                                                                                                                                                                                                                      | OGL 1.0a                                                                                |
+| `srd-2024-renames.json`  | 2014→2024 rename map      | [Converting to SRD 5.2.1](https://media.dndbeyond.com/compendium-images/srd/guide/converting-to-srd-5.2.1.pdf) (Wizards of the Coast)                                                                                                                                                  | CC-BY-4.0                                                                               |
+| `i18n-zh.json`           | —                         | hand-curated EN→CN display map, **calibrated against the [5etools-cn](https://github.com/tjliqy/5etools-cn/tree/cn2.0) terminology table** (site-curated glossary, ~650 spells + abilities/skills/conditions/weapons/features)                                                         | CN translations follow 5etools-cn's community glossary; game text remains OGL/CC-BY-4.0 |
 
 What `dnd_srd_lookup` reads: with `ruleset: "2014"` (the default), `class`
 queries and bare class names are answered from `srd-2014-fulltext.json` and
@@ -49,13 +49,12 @@ this bundle only redistributes the freely licensed game content.
   (`session.header.cwd`); the HTTP routes use the most recently opened live
   session (`SessionStore.list()`); with no session in play the fallback chain
   is `DND_ROOT` / `DSH_CWD` env, then a legacy literal. `node
-  scripts/audit-paths.mjs` (part of `npm run check`) fails on any drive-letter
+scripts/audit-paths.mjs` (part of `npm run check`) fails on any drive-letter
   path committed under `src/`, `cordis.patch.yml` or this README.
 - **The panel never falls back silently.** When the routes cannot resolve a
   session workspace, the response carries an explicit warning that the panel
   renders — plausible data from the wrong workspace is the one failure this
   bundle never ships.
-
 
 ## Install
 
@@ -150,32 +149,46 @@ pay a 15 cp cost with no copper pieces.
 **Both clocks are stamped on every write**: `updated` (real date) and
 `worldTime` (in-world, from the campaign's `calendar.json`).
 
-### Host tools (25)
+### Host tools (31)
 
-| Tool | Purpose |
-|---|---|
-| `dnd_roll` | Any dice expression: `2d6+3`, `4d6kh3`, advantage/disadvantage |
-| `dnd_check` | Ability or skill check vs a DC |
-| `dnd_attack` | Attack vs AC, with crit damage on a natural 20 |
-| `dnd_save` | Saving throw vs a DC (also death saves) |
-| `dnd_dc` | The DC ladder, and passive scores |
-| `dnd_mastery` | 2024 weapon mastery properties (Cleave, Topple, Vex, …) |
-| `dnd_srd_lookup` | Bundled 5e SRD entry by name and category |
-| `dnd_campaign_status` | The data root in effect, every campaign on it, which is active — **start here on a new workspace** |
-| `dnd_campaign_create` | **Write** scaffold a new campaign (state/arc/world/npcs/session-log) and set it active |
-| `dnd_campaign_update` | **Write** one section of a campaign document — set-section / append / remove / flag / activate; your prose is carried verbatim |
-| `dnd_campaign_state` | The active campaign's `state.md`, in whole or by section |
-| `dnd_campaign_search` | Full-text search of the campaign corpus — use before reading whole files |
-| `dnd_arc_status` | Where the campaign arc currently stands |
-| `dnd_character_get` | Read one character or the whole party, as JSON or a card |
-| `dnd_character_create` | **Write** a validated character sheet + state file |
-| `dnd_track` | **Write** HP, temp HP, spell slots, spell lists (`spellbook:+Fireball`), XP (+ level progress), conditions, consumables |
-| `dnd_character_update` | **Write** a character's NARRATIVE sections (Features & Traits, backstory); refuses structured ones |
-| `dnd_spend` | **Write** coin out of the purse |
+| Tool                       | Purpose                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `dnd_roll`                 | Any dice expression: `2d6+3`, `4d6kh3`, advantage/disadvantage                                                                 |
+| `dnd_check`                | Ability or skill check vs a DC                                                                                                 |
+| `dnd_attack`               | Attack vs AC, with crit damage on a natural 20                                                                                 |
+| `dnd_save`                 | Saving throw vs a DC (also death saves)                                                                                        |
+| `dnd_dc`                   | The DC ladder, and passive scores                                                                                              |
+| `dnd_mastery`              | 2024 weapon mastery properties (Cleave, Topple, Vex, …)                                                                        |
+| `dnd_srd_lookup`           | Bundled 5e SRD entry by name and category                                                                                      |
+| `dnd_campaign_status`      | The data root in effect, every campaign on it, which is active — **start here on a new workspace**                             |
+| `dnd_campaign_create`      | **Write** scaffold a new campaign (state/arc/world/npcs/session-log) and set it active                                         |
+| `dnd_campaign_update`      | **Write** one section of a campaign document — set-section / append / remove / flag / activate; your prose is carried verbatim |
+| `dnd_campaign_state`       | The active campaign's `state.md`, in whole or by section                                                                       |
+| `dnd_campaign_search`      | Full-text search of the campaign corpus — use before reading whole files                                                       |
+| `dnd_arc_status`           | Where the campaign arc currently stands                                                                                        |
+| `dnd_character_get`        | Read one character or the whole party, as JSON or a card                                                                       |
+| `dnd_panel_status`         | What the panel is serving right now: resolved data root, active campaign, headline numbers                                     |
+| `dnd_character_create`     | **Write** a validated character sheet + state file                                                                             |
+| `dnd_track`                | **Write** HP, temp HP, spell slots, spell lists (`spellbook:+Fireball`), XP (+ level progress), conditions, consumables        |
+| `dnd_character_update`     | **Write** a character's NARRATIVE sections (Features & Traits, backstory); refuses structured ones                             |
+| `dnd_spend`                | **Write** coin out of the purse                                                                                                |
+| `dnd_enemy_create`         | **Write** enemy cards from an SRD statblock — independent cards, not a group HP pool                                           |
+| `dnd_encounter_difficulty` | Rate an encounter's difficulty before play: enemies by CR, party read from the campaign                                        |
+| `dnd_loot`                 | Roll coin for a defeated enemy by CR band — a copper total to hand out with `dnd_track` or `dnd_spend`                         |
+| `dnd_initiative`           | **Write** the turn order (or read it back); a PC's player rolls their own d20                                                  |
+| `dnd_initiative_end`       | **Write** the end of the encounter; live effects are kept                                                                      |
+| `dnd_effect`               | **Write** a timed effect: start, tick, end, list — durations run against the world clock                                       |
+| `dnd_concentration`        | **Write** concentration: start, break (CON save from damage taken), end, status                                                |
+| `dnd_death_save`           | **Write** death saves: success, failure, reset, status                                                                         |
+| `dnd_rest`                 | **Write** a short or long rest for one character or the whole party                                                            |
+| `dnd_level_up`             | **Write** a level-up: plan first, apply only on confirm                                                                        |
+| `dnd_calendar`             | Read the world clock, or **write** an advance to it (hour/day/week; short/long rest)                                           |
+| `dnd_note`                 | **Write** a dated entry to the session log: loot, plot hooks, recaps, freeform                                                 |
 
-The read tools are pure. The write tools live in their own modules
-(`lib/host/tools/track.mjs`, `character-create.mjs`, `campaign-init.mjs`, …)
-so the write path can be read and tested on its own.
+The fifteen read tools are pure. The sixteen write tools live in their own
+modules (`lib/host/tools/track.mjs`, `character-create.mjs`, `campaign-init.mjs`,
+the play-layer families beside them, …) so the write path can be read and
+tested on its own.
 
 **Bootstrap a workspace with tools, not shell commands.** On a fresh
 workspace, call `dnd_campaign_status` (what exists, what is active) and
@@ -230,7 +243,7 @@ in the browser would give two places to drift.
 ```bash
 npm run build      # assemble lib/ from src/
 npm run watch      # rebuild on change
-npm test           # 12 unit and contract suites
+npm test           # 31 unit and contract suites
 npm run verify     # evaluate lib/client.js headlessly, as the loader does
 npm run test:writes # drive the write tools end to end in a throwaway temp workspace
 npm run check      # all of the above
@@ -286,9 +299,6 @@ build time.
   to the bind address rather than to each route. The one retained protection is
   the `register()` disposer being owned by `ctx.effect`, because a duplicate
   `(kind, path)` throws on reload.
-- **The `dnd` skill at `.agents/skills/dnd/` is reference only.** It documents
-  the authoritative data formats, which this bundle follows, but the plugin does
-  not call its scripts.
 
 ## Releasing
 
