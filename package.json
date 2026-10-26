@@ -43,7 +43,13 @@
     "test:concurrency": "node scripts/concurrency-scenario.mjs",
     "test:ownership": "node scripts/audit-test-ownership.mjs",
     "verify": "node scripts/verify-client.mjs",
-    "check": "npm run build && npm test && npm run test:ownership && npm run verify && node scripts/audit-paths.mjs && npm run test:writes && npm run test:concurrency"
+    "check": "npm run build && npm test && npm run test:ownership && npm run verify && node scripts/audit-paths.mjs && npm run test:writes && npm run test:concurrency",
+    "prepare": "husky"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
+  }
 }
