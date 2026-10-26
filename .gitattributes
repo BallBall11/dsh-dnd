@@ -1,2 +1,3 @@
+* text=auto
 .husky/* text eol=lf
 test/fixtures/*.md text eol=lf
