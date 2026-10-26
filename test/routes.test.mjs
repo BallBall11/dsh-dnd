@@ -12,7 +12,7 @@
  * is read once, at the end, purely to prove this suite did not write to it —
  * never to assert what it contains.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'

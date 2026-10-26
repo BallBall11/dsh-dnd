@@ -3,7 +3,7 @@
 > 用途：让「测试读活战役数据」这一类缺陷不再复发。每个新写测试的人在动手前读这一节。
 > 背景缺陷：`test/*.test.mjs` 直接读 `campaigns/morgansfort/characters/alice.md`。
 > 插件随后**合法地**迁移了那个角色，5 个套件同时变红 —— 不是代码回归，是测试的输入变了形状。
-> 强制手段：`npm run test:ownership`（`scripts/audit-test-ownership.mjs`），已接入 `npm run check`。
+> 强制手段：`npm run test:ownership`（`scripts/audit-test-ownership.mjs`），已接入 `npm run check`。决策记录：`docs/adr/0008-a-test-owns-its-input-or-asserts-a-property.md`。
 
 ---
 
@@ -11,13 +11,13 @@
 
 一个测试要么在问「代码读得对不对」，要么在问「代码守不守规矩」。两者对输入的**所有权**要求相反。
 
-| | 解析器测试（parser test） | 不变量测试（invariant test） |
-|---|---|---|
-| 问的问题 | 这个格式，代码读得对吗？ | 无论数据是什么，这个承诺成立吗？ |
-| 例子 | `sheet-parse`、`sheet-split`、`frontmatter` | 「读取永不写入」「写入幂等」「并发不丢更新」 |
-| 输入归属 | **必须自己拥有** | 可以读活数据 |
-| 输入来源 | `test/fixtures/`（冻结 fixture） | 活战役目录，或 `campaigns/stage2-test/` |
-| 断言形式 | 可以断言**具体值**（`INT === 17`） | **只能断言性质**，禁止快照 |
+|          | 解析器测试（parser test）                   | 不变量测试（invariant test）                 |
+| -------- | ------------------------------------------- | -------------------------------------------- |
+| 问的问题 | 这个格式，代码读得对吗？                    | 无论数据是什么，这个承诺成立吗？             |
+| 例子     | `sheet-parse`、`sheet-split`、`frontmatter` | 「读取永不写入」「写入幂等」「并发不丢更新」 |
+| 输入归属 | **必须自己拥有**                            | 可以读活数据                                 |
+| 输入来源 | `test/fixtures/`（冻结 fixture）            | 活战役目录，或 `campaigns/stage2-test/`      |
+| 断言形式 | 可以断言**具体值**（`INT === 17`）          | **只能断言性质**，禁止快照                   |
 
 一句话判据：
 
@@ -38,11 +38,13 @@
 
 ```js
 // ✅ 正确：读提交进仓库的冻结 fixture
-const REAL_SHEET = new URL('./fixtures/alice-unmigrated.md', import.meta.url).pathname
-  .replace(/^\/([A-Za-z]:)/, '$1')   // Windows：去掉 /D:/ 的前导斜杠
+const REAL_SHEET = new URL(
+  './fixtures/alice-unmigrated.md',
+  import.meta.url
+).pathname.replace(/^\/([A-Za-z]:)/, '$1'); // Windows：去掉 /D:/ 的前导斜杠
 
 // ❌ 错误：读活战役文件 —— 插件一迁移它就变形状
-const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md'
+const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md';
 ```
 
 ### fixture 的硬性要求
@@ -50,7 +52,8 @@ const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md'
 1. **提交进仓库**，放在 `test/fixtures/`。
 2. **用摘要钉死**。`sheet-parse` / `sheet-split` 都断言 `FIXTURE_SHA256`：
    ```js
-   const FIXTURE_SHA256 = '91a90f003c8166997765dfd2e82c4ae6cd0040ae465dfc681919c38ef6aa6688'
+   const FIXTURE_SHA256 =
+     '91a90f003c8166997765dfd2e82c4ae6cd0040ae465dfc681919c38ef6aa6688';
    ```
    能被随意编辑成「当前代码恰好接受的样子」的东西不是 fixture，是镜子。
    钉住摘要让任何改动都成为一次**显式行为**。
@@ -62,8 +65,8 @@ const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md'
 
 #### 当前 fixture 清单
 
-| fixture | 摘要 | 来源 | 使用者 |
-|---|---|---|---|
+| fixture                             | 摘要            | 来源                                    | 使用者                                         |
+| ----------------------------------- | --------------- | --------------------------------------- | ---------------------------------------------- |
 | `test/fixtures/alice-unmigrated.md` | `91a90f00…6688` | `morgansfort/alice.md` 迁移前的真实内容 | `sheet-parse.test.mjs`、`sheet-split.test.mjs` |
 
 ---
@@ -77,29 +80,29 @@ const REAL_SHEET = 'D:/DND/campaigns/morgansfort/characters/alice.md'
 
 ```js
 // ✅ 「这次运行没有改变真实战役」—— 对整个目录做哈希前后比对
-const before = snapshotTree(LIVE_CHAR_DIR)
-await readAllCharacters(fs, LIVE_CHAR_DIR)
-const changes = diffTree(before, snapshotTree(LIVE_CHAR_DIR))
-assert.deepEqual(changes, [], 'reading must not write: ' + changes.join('; '))
+const before = snapshotTree(LIVE_CHAR_DIR);
+await readAllCharacters(fs, LIVE_CHAR_DIR);
+const changes = diffTree(before, snapshotTree(LIVE_CHAR_DIR));
+assert.deepEqual(changes, [], 'reading must not write: ' + changes.join('; '));
 
 // ✅ 「标志与文件互为反面」—— 规则，不是某个角色的当前状态
-assert.equal(c.hasStateFile, !c.needsMigration)
+assert.equal(c.hasStateFile, !c.needsMigration);
 
 // ✅ 「两次读结果相同」—— 自洽性，不涉及具体值
-assert.deepEqual(second.state, first.state)
+assert.deepEqual(second.state, first.state);
 ```
 
 ### 禁止的断言（快照）
 
 ```js
 // ❌ 战役状态快照 —— 角色一升级、一掉血就变红
-assert.equal(c.state.identity.class, 'Wizard')
-assert.deepEqual(c.state.combat.hp, { current: 8, max: 8 })
-assert.equal(c.state.currency, 800)
+assert.equal(c.state.identity.class, 'Wizard');
+assert.deepEqual(c.state.combat.hp, { current: 8, max: 8 });
+assert.equal(c.state.currency, 800);
 
 // ❌ 迁移状态快照 —— 迁移是合法操作，这个代理条件必然过期
-assert.equal(c.needsMigration, true)
-assert.equal(existsSync(stateFile), false)
+assert.equal(c.needsMigration, true);
+assert.equal(existsSync(stateFile), false);
 ```
 
 ### 判据
@@ -121,12 +124,12 @@ assert.equal(existsSync(stateFile), false)
 
 需要**写入**的测试自建目录，并在 `finally` 里恢复。
 
-| 手法 | 位置 | 说明 |
-|---|---|---|
-| `mkdtempSync(tmpdir(), …)` | `state-io.test.mjs`、`routes.test.mjs` | 真磁盘、真 I/O，测完即删 |
-| 前缀重映射 | `host.test.mjs`、`routes.test.mjs` | 把 `D:/DND/campaigns` 映到临时树，**保留生产路径形状** |
-| `campaigns/stage2-test` | `write-tools-scenario.mjs`、`concurrency-scenario.mjs` | 可抛弃的写入沙盒 |
-| `writeText` 直接抛异常 | `migrate-real-dryrun.mjs` | 让脚本**不可能**误写 |
+| 手法                       | 位置                                                   | 说明                                                   |
+| -------------------------- | ------------------------------------------------------ | ------------------------------------------------------ |
+| `mkdtempSync(tmpdir(), …)` | `state-io.test.mjs`、`routes.test.mjs`                 | 真磁盘、真 I/O，测完即删                               |
+| 前缀重映射                 | `host.test.mjs`、`routes.test.mjs`                     | 把 `D:/DND/campaigns` 映到临时树，**保留生产路径形状** |
+| `campaigns/stage2-test`    | `write-tools-scenario.mjs`、`concurrency-scenario.mjs` | 可抛弃的写入沙盒                                       |
+| `writeText` 直接抛异常     | `migrate-real-dryrun.mjs`                              | 让脚本**不可能**误写                                   |
 
 ### 两个必须记住的坑
 
@@ -186,14 +189,14 @@ mock 若比真实后端更宽松，就永远不会失败 —— 本项目已经�
 
 ## 六、共享助手 `test/support/live-data.mjs`
 
-| 导出 | 用途 |
-|---|---|
-| `snapshotTree(dir)` | 递归快照目录：相对路径 → sha256 |
-| `diffTree(before, after)` | 报告差异（`created:`/`modified:`/`deleted:`），全量 Map 比对会淹没真正变的那一条 |
-| `liveWitness(path, label)` | 「这个路径这次动过没有」；`assertUnchanged()` 一行断言 |
-| `hashLivePath(p)` / `liveBytes(p)` | 单文件摘要 / 字节，缺失返回 `null`，**永不抛** |
-| `liveExists(p)` | 路径是否存在 |
-| `LIVE_CAMPAIGN` / `LIVE_MARKER` | 活战役目录 / 活跃标记的规范常量 |
+| 导出                               | 用途                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| `snapshotTree(dir)`                | 递归快照目录：相对路径 → sha256                                                  |
+| `diffTree(before, after)`          | 报告差异（`created:`/`modified:`/`deleted:`），全量 Map 比对会淹没真正变的那一条 |
+| `liveWitness(path, label)`         | 「这个路径这次动过没有」；`assertUnchanged()` 一行断言                           |
+| `hashLivePath(p)` / `liveBytes(p)` | 单文件摘要 / 字节，缺失返回 `null`，**永不抛**                                   |
+| `liveExists(p)`                    | 路径是否存在                                                                     |
+| `LIVE_CAMPAIGN` / `LIVE_MARKER`    | 活战役目录 / 活跃标记的规范常量                                                  |
 
 全部**只读**：这个模块在构造上就无法写入活数据。
 

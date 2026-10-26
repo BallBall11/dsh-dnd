@@ -36,7 +36,6 @@
  *      A hand-edited file can therefore lose data without error. The write
  *      path takes structured objects only and never raw JSON text.
  *
- * See docs/REWRITE-PLAN.md §4.
  */
 
 /** Bump when the on-disk shape changes incompatibly. */

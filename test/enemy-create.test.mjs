@@ -6,7 +6,7 @@
  * (same policy as host.test.mjs's lookup tests). Everything WRITTEN goes
  * through a temp-tree fs shim whose session cwd IS the root.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/enemy-create.mjs
+ * Rules: src/host/tools/enemy-create.mjs
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs'

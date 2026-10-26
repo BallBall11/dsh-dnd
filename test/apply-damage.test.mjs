@@ -5,7 +5,7 @@
  * nothing touches the filesystem or a campaign fixture. The dnd_track path is
  * exercised at the applyTrackChanges boundary, which is also pure.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/apply-damage.mjs
+ * Rules: src/host/tools/apply-damage.mjs
  */
 import assert from 'node:assert/strict'
 import { applyDamage, isEnemyTag } from '../src/host/tools/apply-damage.mjs'

@@ -21,7 +21,7 @@
  * defect. These two must not produce the same message, and the test that they
  * differ is what keeps the diagnosis honest.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs'

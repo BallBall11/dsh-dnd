@@ -21,7 +21,7 @@
  * failed — not because the splitter broke, but because the input had
  * legitimately changed shape. A parser test must own its input.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'

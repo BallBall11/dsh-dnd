@@ -7,7 +7,7 @@
  * asserted through the campaign tool's own index: a note the search cannot
  * find is a note that was never written.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/note.mjs
+ * Rules: src/host/tools/note.mjs
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs'

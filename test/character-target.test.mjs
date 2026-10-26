@@ -29,7 +29,7 @@
  * and "bob" is the discriminating probe: it matches `bob` EXACTLY and
  * `bob-alice` by SUBSTRING, so only a working exact-match tier returns `bob`.
  * Measured: with the exact tier deleted, "bob" reports "not found" while "bob-"
- * still resolves — see docs/harness/T3-CHARACTER-TARGET-RESOLUTION.md.
+ * still resolves.
  *
  * ## Why the roster is a TEMP tree with a remapped D:/DND
  *
@@ -55,7 +55,7 @@
  * live-data reference and needs no allowlist entry. (The one literal it would
  * otherwise need is deliberately never spelled out — see PROD_PREFIX below.)
  *
- * Rules: docs/harness/TEST-DATA-OWNERSHIP.md · test/support/live-data.mjs
+ * Rules: docs/agents/test-data-ownership.md · test/support/live-data.mjs
  */
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, statSync, readdirSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'

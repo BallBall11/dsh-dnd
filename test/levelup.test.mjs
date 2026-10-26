@@ -6,7 +6,7 @@
  * confirm writes through the shared path, XP gating and force behave, and a
  * multiclass-style classless sheet is refused rather than guessed.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/levelup.mjs
+ * Rules: src/host/tools/levelup.mjs
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs'

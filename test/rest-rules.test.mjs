@@ -8,7 +8,7 @@
  *   2. the WRITE PATH end to end through dnd_rest (single and party modes)
  *      against a temp-tree fs shim whose session cwd IS the root.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/rest-rules.mjs
+ * Rules: src/host/tools/rest-rules.mjs
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs'

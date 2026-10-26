@@ -17,7 +17,7 @@
  * routes.test.mjs does, so the production path shape is preserved while
  * nothing live is touched.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 // Async API for the fs-service mock, sync API for building the temp tree.

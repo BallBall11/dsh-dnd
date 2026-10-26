@@ -7,7 +7,7 @@
  * regression: the test's input had changed shape.
  *
  * The rules that prevent it are written down in
- * docs/harness/TEST-DATA-OWNERSHIP.md, and they are easy to state:
+ * docs/agents/test-data-ownership.md, and they are easy to state:
  *
  *   PARSER TEST     owns its input. Reads test/fixtures/. Never live data.
  *   INVARIANT TEST  may read live data, but must assert a PROPERTY

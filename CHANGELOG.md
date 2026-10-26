@@ -85,7 +85,6 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   suspect is the invocation channel (a shell call with a non-UTF-8 codepage),
   not the tool.
 
-
 ### Added
 
 - **`dnd_campaign_update` - campaign documents get a controlled write path.**
@@ -136,7 +135,7 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 
 ### Added
 
-- **Six GM tool gaps closed** (plan: `docs/harness/GAP-TOOLS-PLAN.md`), aimed
+- **Six GM tool gaps closed** aimed
   at an agent that plays the DM end to end:
   - `dnd_rest` — a short or long rest settled in one call, for one character
     or the whole party (`party: true`). Hit Dice are rolled by the tool with
@@ -308,7 +307,7 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
 - **The complete 2014 SRD ships with the bundle** (`data/dnd5e_srd_full.json`,
   from https://github.com/BTMorton/dnd-5e-srd, OGL/CC-BY-4.0), and
   `dnd_srd_lookup` gains a `class` category over it: `query=bard
-  category=class` returns the whole class document — hit points,
+category=class` returns the whole class document — hit points,
   proficiencies, starting equipment, the 20-level table (proficiency bonus,
   features, spells known, per-level spell slots) and every feature in prose.
   A bare class-name query under ruleset 2014 routes to the class document
@@ -331,15 +330,15 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   structured source (5e-bits/5e-database `src/2024/en`, SRD 5.2 CC-BY-4.0 —
   the same upstream the dataset was built from), via the committed
   `scripts/refresh-2024-srd.mjs`:
-    - `classes`: the full 20-level table per class (proficiency bonus,
-      feature names, cantrips known, prepared/known spells, per-level spell
-      slots, class-specific values such as the Bardic Inspiration die), the
-      spellcasting block, subclass names, and starting-equipment options —
-      replacing the seven-field hand skeleton. `dnd_character_create` auto
-      spell-slot fill now uses the real 2024 progression (a 5th-level Bard
-      gets 4/3/2).
-    - `features`: the stale 2014-worded descriptions are replaced with the
-      232 true 2024 features, each carrying its level.
+  - `classes`: the full 20-level table per class (proficiency bonus,
+    feature names, cantrips known, prepared/known spells, per-level spell
+    slots, class-specific values such as the Bardic Inspiration die), the
+    spellcasting block, subclass names, and starting-equipment options —
+    replacing the seven-field hand skeleton. `dnd_character_create` auto
+    spell-slot fill now uses the real 2024 progression (a 5th-level Bard
+    gets 4/3/2).
+  - `features`: the stale 2014-worded descriptions are replaced with the
+    232 true 2024 features, each carrying its level.
 
 ### Fixed
 
@@ -369,7 +368,6 @@ All notable changes to `dsh-dnd` are documented here. Format roughly follows
   `src/`, `cordis.patch.yml` or `README.md`. test/ and scripts/ are exempt —
   their Windows-looking literals are synthetic fixtures remapped into temp
   trees with leak guards.
-
 
 ### Changed
 
@@ -560,6 +558,7 @@ disagreed about a spell slot with no rule for which won.
 ## [0.1.0] — 2026-09-04
 
 ### Added
+
 - Initial bundle: `dsh-dnd` npm package (Host tool suite + Client panel, no skin).
 - Host tools, split into five cohesive modules:
   - `dnd-core` — `dnd_roll`, `dnd_srd_lookup`, `dnd_campaign_state` (moved from dnd-host.mjs).
@@ -571,5 +570,6 @@ disagreed about a spell slot with no rule for which won.
 - Install via `dsh plugin --profile web add dsh-dnd` (or local `link:`).
 
 ### Known broken
+
 - The Client half could not load: it used `host.call` / `harness.handle`, which
   a bundle cannot use. The panel never appeared.

@@ -21,7 +21,7 @@
  * caught. The remap below is the fix, and `guard()` below makes a leak
  * impossible rather than merely unlikely.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs'

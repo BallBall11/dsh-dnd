@@ -8,7 +8,7 @@
  * I/O, which is worth paying for a module that rewrites campaign data.
  *
  * Two kinds of test live here, and they obey different rules (see
- * test/support/live-data.mjs and docs/harness/TEST-DATA-OWNERSHIP.md):
+ * test/support/live-data.mjs and docs/agents/test-data-ownership.md):
  *
  *   - the round-trip cases below own their input outright: a temp directory
  *     this file creates and deletes.

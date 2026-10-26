@@ -9,7 +9,7 @@
  * written inline, and the "real sheet" block reads the committed fixture
  * test/fixtures/alice-unmigrated.md — never a live campaign file.
  *
- * Rules: test/support/live-data.mjs · docs/harness/TEST-DATA-OWNERSHIP.md
+ * Rules: test/support/live-data.mjs · docs/agents/test-data-ownership.md
  */
 import assert from 'node:assert/strict'
 import { parseCharacterSheet, formatCharacter, PARSE_VERSION } from '../src/host/tools/sheet-parse.mjs'

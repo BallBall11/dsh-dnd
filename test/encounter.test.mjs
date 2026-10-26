@@ -6,7 +6,7 @@
  * known answers, and a wrong multiplier is exactly the kind of silent error
  * only an independent check catches.
  *
- * Rules: docs/harness/GAP-TOOLS-PLAN.md · src/host/tools/encounter.mjs
+ * Rules: src/host/tools/encounter.mjs
  */
 import assert from 'node:assert/strict'
 import { difficultyFor } from '../src/host/tools/encounter.mjs'

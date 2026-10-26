@@ -1,5 +1,5 @@
 /**
- * t3-refusal-probe.mjs — evidence for docs/harness/T3-CHARACTER-TARGET-RESOLUTION.md §5.1.
+ * t3-refusal-probe.mjs — evidence for the refuted "explicit character is ignored" misreading; see test/character-target.test.mjs.
  *
  * Not part of npm run check; run by hand:
  *

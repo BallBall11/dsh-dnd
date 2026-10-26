@@ -18,7 +18,7 @@
  * file. The plugin then migrated that character — a legal change — and the
  * tests failed while the code was perfect. The input had changed shape.
  *
- * See docs/harness/TEST-DATA-OWNERSHIP.md for the full rationale, and
+ * See docs/agents/test-data-ownership.md for the full rationale, and
  * `npm run test:ownership` for the audit that enforces it.
  *
  * Nothing here writes to live data. `hashLivePath` and `liveBytes` are

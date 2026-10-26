@@ -4,6 +4,8 @@
 
 Full gate: `npm run check`; CI reruns the portable subset on every push. See `.github/workflows/ci.yml`.
 
+Every test owns its input or asserts a property: see `docs/agents/test-data-ownership.md` and ADR-0008 before writing tests.
+
 ## Agent skills
 
 ### Issue tracker
