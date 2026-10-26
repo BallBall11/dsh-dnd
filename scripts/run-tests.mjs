@@ -14,7 +14,10 @@
  * stdio, so output streams straight through and each start is announced.
  *
  * Fail-fast semantics match the old chain exactly: the first failing suite
- * stops the run, and its exit code becomes the run's.
+ * stops the run, and its exit code becomes the run's. A suite killed by a
+ * signal has no exit code — the runner names the signal in its failure line
+ * and stops with exit code 1, rather than report a number the suite never
+ * returned.
  *
  * Plain Node ESM, zero dependencies. Paths are built with node:path so the
  * one script is correct on the Windows dev machine and on POSIX CI alike.
@@ -47,9 +50,14 @@ for (const name of suites) {
   console.log(`\n--- node test/${name} ---`)
   const result = spawnSync(process.execPath, [suitePath], { stdio: 'inherit' })
   if (result.status !== 0) {
-    const code = result.status ?? 1
-    console.error(`\nrun-tests: test/${name} exited with code ${code} — stopping.`)
-    process.exit(code)
+    if (result.status === null) {
+      console.error(
+        `\nrun-tests: test/${name} exited with signal ${result.signal ?? 'unknown'} — stopping.`,
+      )
+      process.exit(1)
+    }
+    console.error(`\nrun-tests: test/${name} exited with code ${result.status} — stopping.`)
+    process.exit(result.status)
   }
 }
 
