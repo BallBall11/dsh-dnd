@@ -102,8 +102,7 @@ _Avoid_: error, warning
 
 **Idempotency Key**:
 An optional, caller-chosen key that makes a repeated write a no-op reported as
-a duplicate, so a retry cannot double-charge. The key is persisted with the
-state it guards, so it survives a restart.
+a duplicate, so a retry cannot double-charge.
 _Avoid_: dedupe key, request id
 
 **Plan**:
@@ -205,8 +204,7 @@ _Avoid_: server, backend
 
 **Panel**:
 The Client-side character panel. It renders what the Host sends and formats
-almost nothing itself — money arrives pre-formatted, findings arrive as
-strings — so there is no second place to drift.
+almost nothing itself, so there is no second place to drift.
 _Avoid_: UI, dashboard, client
 
 **Session Workspace**:

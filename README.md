@@ -48,9 +48,9 @@ this bundle only redistributes the freely licensed game content.
   resolved at call time: tools use the calling session's workspace
   (`session.header.cwd`); the HTTP routes use the most recently opened live
   session (`SessionStore.list()`); with no session in play the fallback chain
-  is `DND_ROOT` / `DSH_CWD` env, then a legacy literal. `node
-scripts/audit-paths.mjs` (part of `npm run check`) fails on any drive-letter
-  path committed under `src/`, `cordis.patch.yml` or this README.
+  is the `DND_ROOT` / `DSH_CWD` env, then a legacy literal. The path audit
+  (`node scripts/audit-paths.mjs`, part of `npm run check`) fails on any
+  drive-letter path committed under `src/`, `cordis.patch.yml` or this README.
 - **The panel never falls back silently.** When the routes cannot resolve a
   session workspace, the response carries an explicit warning that the panel
   renders — plausible data from the wrong workspace is the one failure this
@@ -153,6 +153,12 @@ pay a 15 cp cost with no copper pieces.
 
 | Tool                       | Purpose                                                                                                                        |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `dnd_campaign_status`      | The data root in effect, every campaign on it, which is active — **start here on a new workspace**                             |
+| `dnd_campaign_create`      | **Write** scaffold a new campaign (state/arc/world/npcs/session-log) and set it active                                         |
+| `dnd_campaign_update`      | **Write** one section of a campaign document — set-section / append / remove / flag / activate; your prose is carried verbatim |
+| `dnd_campaign_state`       | The active campaign's `state.md`, in whole or by section                                                                       |
+| `dnd_campaign_search`      | Full-text search of the campaign corpus — use before reading whole files                                                       |
+| `dnd_arc_status`           | Where the campaign arc currently stands                                                                                        |
 | `dnd_roll`                 | Any dice expression: `2d6+3`, `4d6kh3`, advantage/disadvantage                                                                 |
 | `dnd_check`                | Ability or skill check vs a DC                                                                                                 |
 | `dnd_attack`               | Attack vs AC, with crit damage on a natural 20                                                                                 |
@@ -160,12 +166,6 @@ pay a 15 cp cost with no copper pieces.
 | `dnd_dc`                   | The DC ladder, and passive scores                                                                                              |
 | `dnd_mastery`              | 2024 weapon mastery properties (Cleave, Topple, Vex, …)                                                                        |
 | `dnd_srd_lookup`           | Bundled 5e SRD entry by name and category                                                                                      |
-| `dnd_campaign_status`      | The data root in effect, every campaign on it, which is active — **start here on a new workspace**                             |
-| `dnd_campaign_create`      | **Write** scaffold a new campaign (state/arc/world/npcs/session-log) and set it active                                         |
-| `dnd_campaign_update`      | **Write** one section of a campaign document — set-section / append / remove / flag / activate; your prose is carried verbatim |
-| `dnd_campaign_state`       | The active campaign's `state.md`, in whole or by section                                                                       |
-| `dnd_campaign_search`      | Full-text search of the campaign corpus — use before reading whole files                                                       |
-| `dnd_arc_status`           | Where the campaign arc currently stands                                                                                        |
 | `dnd_character_get`        | Read one character or the whole party, as JSON or a card                                                                       |
 | `dnd_panel_status`         | What the panel is serving right now: resolved data root, active campaign, headline numbers                                     |
 | `dnd_character_create`     | **Write** a validated character sheet + state file                                                                             |

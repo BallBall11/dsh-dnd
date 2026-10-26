@@ -357,8 +357,8 @@ try {
   check(/could not read currency/.test(out), 'an unparseable currency is refused: ' + JSON.stringify(out))
 
   // --- dnd_track xp ------------------------------------------------------
-  // dnd_xp_add was folded into dnd_track: the xp change now reports the level
-  // progress from the stored `xpNext` right in its change list.
+  // the xp change reports the level progress from the stored `xpNext` right in
+  // its change list.
   section('dnd_track — xp and level progress')
   resetFixture({ xp: 0 })
   out = await call('dnd_track', { xp: '+250', reason: 'goblin ambush' })
