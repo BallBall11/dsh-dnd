@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 let failures = 0
 function test(name, fn) {
@@ -25,7 +26,7 @@ function test(name, fn) {
 // The build script runs on import, so the stripper is exercised by building
 // and inspecting the artifact rather than by importing a private function.
 // That is the stronger check anyway: it verifies what actually ships.
-const root = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')) + '/..'
+const root = fileURLToPath(new URL('..', import.meta.url))
 const bundle = readFileSync(path.join(root, 'lib/client.js'), 'utf8')
 
 test('the shipped bundle contains no block comments', () => {

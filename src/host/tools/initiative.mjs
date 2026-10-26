@@ -77,14 +77,10 @@
  * which file holds the fight. The error message names the candidates.
  */
 
-import {
-  activeCampaignDir,
-  findSection,
-  readTextOrUndefined,
-} from "./shared.mjs";
-import { readCharacter, listCharacters } from "./state-io.mjs";
-import { rollD20 } from "./roll.mjs";
-import { sessionOf, writePolicyFor } from "./session-scope.mjs";
+import { activeCampaignDir, findSection, readTextOrUndefined } from './shared.mjs'
+import { readCharacter, listCharacters } from './state-io.mjs'
+import { rollD20 } from './roll.mjs'
+import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import {
   INITIATIVE_SECTION,
   clearEncounterSection,
@@ -92,15 +88,15 @@ import {
   readEncounter,
   sectionOf,
   writeEncounter,
-} from "./encounter-io.mjs";
+} from './encounter-io.mjs'
 
-export const name = "dnd-initiative";
+export const name = 'dnd-initiative'
 
 /** Render a plain string result for the model. */
-const renderText = (_args, value) => [{ type: "text", text: String(value) }];
+const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
 /** The modes that mean "the DM rolls everything". Anything else is `players`. */
-const DM_ROLL_MODES = new Set(["auto", "dm", "dungeon-master", "open", "all"]);
+const DM_ROLL_MODES = new Set(['auto', 'dm', 'dungeon-master', 'open', 'all'])
 
 /**
  * Normalize a `roll_mode` value.
@@ -110,13 +106,10 @@ const DM_ROLL_MODES = new Set(["auto", "dm", "dungeon-master", "open", "all"]);
  *   (see the module header for why the conservative mode is the default).
  */
 export function normalizeRollMode(raw) {
-  if (raw === undefined || raw === null) return "players";
-  const value = String(raw)
-    .trim()
-    .toLowerCase()
-    .replace(/[_.\s]+/g, "-");
-  if (value === "") return "players";
-  return DM_ROLL_MODES.has(value) ? "dm" : "players";
+  if (raw === undefined || raw === null) return 'players'
+  const value = String(raw).trim().toLowerCase().replace(/[_.\s]+/g, '-')
+  if (value === '') return 'players'
+  return DM_ROLL_MODES.has(value) ? 'dm' : 'players'
 }
 
 /**
@@ -142,33 +135,30 @@ export function normalizeRollMode(raw) {
  *   or 'default'.
  */
 export async function readRollMode(fs, campaignDir) {
-  const text = await readTextOrUndefined(fs, `${campaignDir}/state.md`);
-  if (text === undefined)
-    return { mode: "players", source: "default", raw: null };
+  const text = await readTextOrUndefined(fs, `${campaignDir}/state.md`)
+  if (text === undefined) return { mode: 'players', source: 'default', raw: null }
 
-  for (const sectionName of ["Live State Flags", "Session Flags"]) {
-    const section = findSection(text, sectionName);
-    if (section === undefined) continue;
-    const body = section.body;
+  for (const sectionName of ['Live State Flags', 'Session Flags']) {
+    const section = findSection(text, sectionName)
+    if (section === undefined) continue
+    const body = section.body
 
     // Form 1: "- **roll_mode:** players" (also tolerates "roll_mode: players").
-    const list = body.match(/\*\*roll_mode:?\*\*\s*:?\s*([^\n*]+)/i);
+    const list = body.match(/\*\*roll_mode:?\*\*\s*:?\s*([^\n*]+)/i)
     if (list !== null) {
-      const raw = list[1].trim();
-      if (raw !== "")
-        return { mode: normalizeRollMode(raw), source: section.heading, raw };
+      const raw = list[1].trim()
+      if (raw !== '') return { mode: normalizeRollMode(raw), source: section.heading, raw }
     }
 
     // Form 2: "*(roll_mode: auto — DM rolls everything openly …)*" — the flag is
     // followed by an em dash and prose, so the capture stops at the separator.
-    const prose = body.match(/roll_mode\s*:\s*([A-Za-z_-]+)/i);
+    const prose = body.match(/roll_mode\s*:\s*([A-Za-z_-]+)/i)
     if (prose !== null) {
-      const raw = prose[1].trim();
-      if (raw !== "")
-        return { mode: normalizeRollMode(raw), source: section.heading, raw };
+      const raw = prose[1].trim()
+      if (raw !== '') return { mode: normalizeRollMode(raw), source: section.heading, raw }
     }
   }
-  return { mode: "players", source: "default", raw: null };
+  return { mode: 'players', source: 'default', raw: null }
 }
 
 /**
@@ -186,31 +176,26 @@ export async function readRollMode(fs, campaignDir) {
  * @returns the modifier, or 0 when the character has none.
  */
 async function readInitiativeMod(fs, dir, stem) {
-  const character = await readCharacter(fs, dir, stem);
-  const value = character?.state?.combat?.initiative;
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const character = await readCharacter(fs, dir, stem)
+  const value = character?.state?.combat?.initiative
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
 /** Is this combatant entry a PC (whose dice may belong to a player)? */
 function isPc(entry) {
-  if (entry === null || typeof entry !== "object") return false;
-  if (entry.player === true) return true;
-  const kind = String(entry.kind ?? entry.type ?? "")
-    .trim()
-    .toLowerCase();
-  return kind === "pc" || kind === "player" || kind === "character";
+  if (entry === null || typeof entry !== 'object') return false
+  if (entry.player === true) return true
+  const kind = String(entry.kind ?? entry.type ?? '').trim().toLowerCase()
+  return kind === 'pc' || kind === 'player' || kind === 'character'
 }
 
 /** Parse a signed integer, tolerating a leading `+`. */
 function parseInt10(value) {
-  if (typeof value === "number" && Number.isFinite(value))
-    return Math.trunc(value);
-  const s = String(value ?? "")
-    .trim()
-    .replace(/^\+/, "");
-  if (s === "") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
+  const s = String(value ?? '').trim().replace(/^\+/, '')
+  if (s === '') return null
+  const n = Number(s)
+  return Number.isFinite(n) ? Math.trunc(n) : null
 }
 
 /**
@@ -235,45 +220,29 @@ function parseInt10(value) {
  */
 export function parseCombatants(raw) {
   if (!Array.isArray(raw) || raw.length === 0) {
-    return {
-      error:
-        'dnd_initiative needs a non-empty `combatants` array, e.g. ["Alice", "Goblin", "Goblin"]. Nothing was written.',
-    };
+    return { error: 'dnd_initiative needs a non-empty `combatants` array, e.g. ["Alice", "Goblin", "Goblin"]. Nothing was written.' }
   }
-  const entries = [];
+  const entries = []
   for (const item of raw) {
-    if (typeof item === "string") {
-      const name = item.trim();
-      if (name === "")
-        return {
-          error:
-            "dnd_initiative: a combatant name is empty. Nothing was written.",
-        };
-      entries.push({ name, kind: "npc", pc: false, mod: null });
-      continue;
+    if (typeof item === 'string') {
+      const name = item.trim()
+      if (name === '') return { error: 'dnd_initiative: a combatant name is empty. Nothing was written.' }
+      entries.push({ name, kind: 'npc', pc: false, mod: null })
+      continue
     }
-    if (item === null || typeof item !== "object" || Array.isArray(item)) {
-      return {
-        error: `dnd_initiative: a combatant entry must be a name or an object, got ${JSON.stringify(item)}. Nothing was written.`,
-      };
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      return { error: `dnd_initiative: a combatant entry must be a name or an object, got ${JSON.stringify(item)}. Nothing was written.` }
     }
-    const name = String(item.name ?? "").trim();
-    if (name === "")
-      return {
-        error:
-          "dnd_initiative: every combatant entry needs a `name`. Nothing was written.",
-      };
-    const mod =
-      item.mod === undefined || item.mod === null ? null : parseInt10(item.mod);
+    const name = String(item.name ?? '').trim()
+    if (name === '') return { error: 'dnd_initiative: every combatant entry needs a `name`. Nothing was written.' }
+    const mod = item.mod === undefined || item.mod === null ? null : parseInt10(item.mod)
     if (item.mod !== undefined && item.mod !== null && mod === null) {
-      return {
-        error: `dnd_initiative: combatant "${name}" has an unreadable \`mod\` (${JSON.stringify(item.mod)}). Nothing was written.`,
-      };
+      return { error: `dnd_initiative: combatant "${name}" has an unreadable \`mod\` (${JSON.stringify(item.mod)}). Nothing was written.` }
     }
-    const pc = isPc(item);
-    entries.push({ name, kind: pc ? "pc" : "npc", pc, mod });
+    const pc = isPc(item)
+    entries.push({ name, kind: pc ? 'pc' : 'npc', pc, mod })
   }
-  return { entries };
+  return { entries }
 }
 
 /**
@@ -288,52 +257,41 @@ export function parseCombatants(raw) {
  * @returns `{ rolls }` or `{ error }`.
  */
 export function parseSuppliedRolls(raw) {
-  if (raw === undefined || raw === null) return { rolls: new Map() };
-  const rolls = new Map();
+  if (raw === undefined || raw === null) return { rolls: new Map() }
+  const rolls = new Map()
   const put = (name, value) => {
-    const key = String(name ?? "")
-      .trim()
-      .toLowerCase();
-    if (key === "") return null;
-    const n = parseInt10(value);
-    if (n === null) return `${name}`;
-    rolls.set(key, n);
-    return undefined;
-  };
+    const key = String(name ?? '').trim().toLowerCase()
+    if (key === '') return null
+    const n = parseInt10(value)
+    if (n === null) return `${name}`
+    rolls.set(key, n)
+    return undefined
+  }
 
   if (Array.isArray(raw)) {
     for (const item of raw) {
-      if (item === null || typeof item !== "object") {
-        return {
-          error: `dnd_initiative: a supplied roll must look like { name, value }, got ${JSON.stringify(item)}. Nothing was written.`,
-        };
+      if (item === null || typeof item !== 'object') {
+        return { error: `dnd_initiative: a supplied roll must look like { name, value }, got ${JSON.stringify(item)}. Nothing was written.` }
       }
-      const bad = put(item.name, item.value ?? item.roll ?? item.total);
+      const bad = put(item.name, item.value ?? item.roll ?? item.total)
       if (bad !== undefined) {
-        return {
-          error: `dnd_initiative: supplied roll for "${bad}" is not a number. Nothing was written.`,
-        };
+        return { error: `dnd_initiative: supplied roll for "${bad}" is not a number. Nothing was written.` }
       }
     }
-    return { rolls };
+    return { rolls }
   }
 
-  if (typeof raw === "object") {
+  if (typeof raw === 'object') {
     for (const [name, value] of Object.entries(raw)) {
-      const bad = put(name, value);
+      const bad = put(name, value)
       if (bad !== undefined) {
-        return {
-          error: `dnd_initiative: supplied roll for "${bad}" is not a number. Nothing was written.`,
-        };
+        return { error: `dnd_initiative: supplied roll for "${bad}" is not a number. Nothing was written.` }
       }
     }
-    return { rolls };
+    return { rolls }
   }
 
-  return {
-    error:
-      "dnd_initiative: `rolls` must be a name -> number map or an array of { name, value }. Nothing was written.",
-  };
+  return { error: 'dnd_initiative: `rolls` must be a name -> number map or an array of { name, value }. Nothing was written.' }
 }
 
 /**
@@ -363,12 +321,11 @@ export function sortTurnOrder(resolved) {
       // persisted JSON because the same wrong sort fed both the render and the
       // file, so the two agreed with each other while both disagreed with 5e
       // and with combat.py (sorted(..., reverse=True)).
-      if (b.entry.initiative !== a.entry.initiative)
-        return b.entry.initiative - a.entry.initiative;
-      if (b.entry.mod !== a.entry.mod) return b.entry.mod - a.entry.mod;
-      return a.index - b.index;
+      if (b.entry.initiative !== a.entry.initiative) return b.entry.initiative - a.entry.initiative
+      if (b.entry.mod !== a.entry.mod) return b.entry.mod - a.entry.mod
+      return a.index - b.index
     })
-    .map((wrapped) => wrapped.entry);
+    .map((wrapped) => wrapped.entry)
 }
 
 /**
@@ -397,52 +354,38 @@ export function sortTurnOrder(resolved) {
  * @returns `{ resolved, pending, rollsSupplied, rollsMade }`.
  */
 export async function resolveInitiative(entries, supplied, mode, modOf) {
-  const resolved = [];
-  const pending = [];
-  let rollsMade = 0;
-  let rollsSupplied = 0;
+  const resolved = []
+  const pending = []
+  let rollsMade = 0
+  let rollsSupplied = 0
 
   for (const entry of entries) {
     // A caller-declared modifier wins over the sheet: an improvised NPC has no
     // character file, and a DM who states "+3" should not be overruled by a
     // lookup that finds nothing.
-    const mod = entry.mod !== null ? entry.mod : await modOf(entry);
+    const mod = entry.mod !== null ? entry.mod : await modOf(entry)
 
-    const given = supplied.get(entry.name.toLowerCase());
+    const given = supplied.get(entry.name.toLowerCase())
     if (given !== undefined) {
-      rollsSupplied += 1;
-      resolved.push({
-        ...entry,
-        mod,
-        natural: given,
-        initiative: given + mod,
-        source: "supplied",
-        pending: false,
-      });
-      continue;
+      rollsSupplied += 1
+      resolved.push({ ...entry, mod, natural: given, initiative: given + mod, source: 'supplied', pending: false })
+      continue
     }
 
-    if (mode === "players" && entry.pc) {
+    if (mode === 'players' && entry.pc) {
       // NOT ROLLED. No d20 value for this PC exists after this line — see the
       // module header. The entry is recorded as pending so the caller can be
       // told exactly whose number is owed.
-      pending.push({ ...entry, mod, pending: true });
-      continue;
+      pending.push({ ...entry, mod, pending: true })
+      continue
     }
 
-    const roll = rollD20(mod, false, false);
-    rollsMade += 1;
-    resolved.push({
-      ...entry,
-      mod,
-      natural: roll.natural,
-      initiative: roll.total,
-      source: "rolled",
-      pending: false,
-    });
+    const roll = rollD20(mod, false, false)
+    rollsMade += 1
+    resolved.push({ ...entry, mod, natural: roll.natural, initiative: roll.total, source: 'rolled', pending: false })
   }
 
-  return { resolved, pending, rollsMade, rollsSupplied };
+  return { resolved, pending, rollsMade, rollsSupplied }
 }
 
 /**
@@ -453,71 +396,49 @@ export async function resolveInitiative(entries, supplied, mode, modOf) {
  * @returns the tool's text result.
  */
 export function renderTurnOrder(options) {
-  const {
-    ordered,
-    pending,
-    mode,
-    modeSource,
-    modeRaw,
-    character,
-    round,
-    written,
-    warnings,
-  } = options;
-  const lines = [];
+  const { ordered, pending, mode, modeSource, modeRaw, character, round, written, warnings } = options
+  const lines = []
 
-  const modeText =
-    modeSource === "default"
-      ? "players (default — state.md sets no roll_mode, so PCs are NEVER rolled for)"
-      : `${mode} (from "${modeSource}"'${modeRaw}')`;
-  lines.push(`**Initiative — Round ${round}** (${character}.encounter.json)`);
-  lines.push(`roll_mode: ${modeText}`);
-  lines.push("");
+  const modeText = modeSource === 'default'
+    ? 'players (default — state.md sets no roll_mode, so PCs are NEVER rolled for)'
+    : `${mode} (from "${modeSource}"'${modeRaw}')`
+  lines.push(`**Initiative — Round ${round}** (${character}.encounter.json)`)
+  lines.push(`roll_mode: ${modeText}`)
+  lines.push('')
 
   if (ordered.length > 0) {
-    lines.push("Turn order:");
+    lines.push('Turn order:')
     for (const [index, entry] of ordered.entries()) {
-      const marker = index === 0 ? "► " : "  ";
-      const natural =
-        entry.source === "supplied"
-          ? `player rolled ${entry.natural}`
-          : `d20(${entry.natural})`;
-      const mod = entry.mod >= 0 ? `+${entry.mod}` : String(entry.mod);
-      const kind = entry.pc ? "PC" : "NPC";
-      lines.push(
-        `${marker}${index + 1}. ${entry.name} (${kind}) — ${natural} ${mod} = **${entry.initiative}**`
-      );
+      const marker = index === 0 ? '► ' : '  '
+      const natural = entry.source === 'supplied'
+        ? `player rolled ${entry.natural}`
+        : `d20(${entry.natural})`
+      const mod = entry.mod >= 0 ? `+${entry.mod}` : String(entry.mod)
+      const kind = entry.pc ? 'PC' : 'NPC'
+      lines.push(`${marker}${index + 1}. ${entry.name} (${kind}) — ${natural} ${mod} = **${entry.initiative}**`)
     }
   } else {
-    lines.push(
-      "Turn order: (empty — no combatant has an initiative value yet)"
-    );
+    lines.push('Turn order: (empty — no combatant has an initiative value yet)')
   }
 
   if (pending.length > 0) {
-    lines.push("");
-    lines.push(
-      `WAITING ON THE PLAYERS — not rolled for, and not placed in the order (${pending.length}):`
-    );
+    lines.push('')
+    lines.push(`WAITING ON THE PLAYERS — not rolled for, and not placed in the order (${pending.length}):`)
     for (const entry of pending) {
-      const mod = entry.mod >= 0 ? `+${entry.mod}` : String(entry.mod);
-      lines.push(
-        `  · ${entry.name} — needs the player's d20; modifier ${mod}. Pass it as rolls: { "${entry.name}": <d20> }.`
-      );
+      const mod = entry.mod >= 0 ? `+${entry.mod}` : String(entry.mod)
+      lines.push(`  · ${entry.name} — needs the player's d20; modifier ${mod}. Pass it as rolls: { "${entry.name}": <d20> }.`)
     }
-    lines.push("Ask the player for the number; do NOT roll it for them.");
+    lines.push('Ask the player for the number; do NOT roll it for them.')
   }
 
   if (written === false) {
-    lines.push("");
-    lines.push(
-      "NOTE: the order was NOT written — no character file could be resolved to hold it."
-    );
+    lines.push('')
+    lines.push('NOTE: the order was NOT written — no character file could be resolved to hold it.')
   }
 
-  for (const warning of warnings ?? []) lines.push(`NOTE: ${warning}`);
+  for (const warning of warnings ?? []) lines.push(`NOTE: ${warning}`)
 
-  return lines.join("\n");
+  return lines.join('\n')
 }
 
 /**
@@ -528,7 +449,7 @@ export function renderTurnOrder(options) {
 export function buildTools(ctx) {
   // Lazy, for the same reason as every other family: a mount that loses the
   // startup race must not capture undefined forever.
-  const getFs = () => ctx.get("fs");
+  const getFs = () => ctx.get('fs')
 
   /**
    * The sandbox policy each write is judged against, resolved from the session
@@ -538,7 +459,7 @@ export function buildTools(ctx) {
    *
    * @param exec - the `ToolRunContext`, or undefined.
    */
-  const policyFor = (exec) => writePolicyFor(ctx, exec);
+  const policyFor = (exec) => writePolicyFor(ctx, exec)
 
   /**
    * Locate the campaign and the character whose encounter file holds the fight.
@@ -548,241 +469,159 @@ export function buildTools(ctx) {
    * @returns `{ dir, campaign, stem, modOf }` or `{ error }`.
    */
   async function locateEncounter(fs, requested, session) {
-    const located = await activeCampaignDir(fs, session);
-    if (located?.error !== undefined) return { error: located.error };
+    const located = await activeCampaignDir(fs, session)
+    if (located?.error !== undefined) return { error: located.error }
     if (located === undefined) {
-      return {
-        error:
-          "No active campaign. Load one with /dm:dnd load <campaign> first.",
-      };
+      return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
     }
-    const dir = located.dir + "/characters";
-    const listed = await listCharacters(fs, dir);
+    const dir = located.dir + '/characters'
+    const listed = await listCharacters(fs, dir)
     if (listed.length === 0) {
-      return {
-        error:
-          "No characters in campaign " +
-          located.campaign +
-          ", so there is nowhere to keep the turn order.",
-      };
+      return { error: 'No characters in campaign ' + located.campaign + ', so there is nowhere to keep the turn order.' }
     }
 
-    let stem;
-    if (requested !== undefined && String(requested).trim() !== "") {
-      const wanted = String(requested).toLowerCase().trim();
-      const match =
-        listed.find((c) => c.name.toLowerCase() === wanted) ??
-        listed.find((c) => c.name.toLowerCase().includes(wanted));
+    let stem
+    if (requested !== undefined && String(requested).trim() !== '') {
+      const wanted = String(requested).toLowerCase().trim()
+      const match = listed.find((c) => c.name.toLowerCase() === wanted)
+        ?? listed.find((c) => c.name.toLowerCase().includes(wanted))
       if (match === undefined) {
-        const available = listed.map((c) => c.name).join(", ");
-        return {
-          error:
-            'Character "' +
-            requested +
-            '" not found in ' +
-            located.campaign +
-            ". Available: " +
-            available,
-        };
+        const available = listed.map((c) => c.name).join(', ')
+        return { error: 'Character "' + requested + '" not found in ' + located.campaign + '. Available: ' + available }
       }
-      stem = match.name;
+      stem = match.name
     } else if (listed.length === 1) {
-      stem = listed[0].name;
+      stem = listed[0].name
     } else {
       // The order is stored per character, so with several characters the tool
       // must not guess: guessing would write the fight onto the wrong sheet and
       // the next read would look for it somewhere else.
-      const available = listed.map((c) => c.name).join(", ");
-      return {
-        error:
-          "Which character's encounter file should hold the turn order? " +
-          located.campaign +
-          " has " +
-          listed.length +
-          ": " +
-          available +
-          ". Pass `character`.",
-      };
+      const available = listed.map((c) => c.name).join(', ')
+      return { error: "Which character's encounter file should hold the turn order? " + located.campaign + ' has ' + listed.length + ': ' + available + '. Pass `character`.' }
     }
 
     // Combatant names come from the DM's mouth, not the filesystem, so each
     // one resolves to a real character stem exactly like `character` above:
     // a spelling-case mismatch would silently read the modifier as 0.
-    const stemByName = new Map(
-      listed.map((c) => [c.name.toLowerCase(), c.name])
-    );
+    const stemByName = new Map(listed.map((c) => [c.name.toLowerCase(), c.name]))
     return {
       dir,
       campaign: located.campaign,
       stem,
-      modOf: (entry) =>
-        readInitiativeMod(
-          fs,
-          dir,
-          stemByName.get(String(entry.name).toLowerCase()) ?? entry.name
-        ),
-    };
+      modOf: (entry) => readInitiativeMod(fs, dir, stemByName.get(String(entry.name).toLowerCase()) ?? entry.name),
+    }
   }
 
   const initiative = {
-    name: "dnd_initiative",
+    name: 'dnd_initiative',
     description:
-      "Roll initiative for several combatants at once and return the SORTED turn order, then persist it so a later call can read it back. " +
-      "Rolls d20 + each combatant's initiative modifier through the same dice path as dnd_roll. " +
-      "Honours the campaign's roll_mode: in `players` mode a PC is NEVER rolled for - supply the player's number via `rolls` and it joins the order, otherwise it is reported as pending. " +
-      "NPCs and monsters are always rolled. " +
-      "With no `combatants`, reads back the order already stored for this encounter.",
+      'Roll initiative for several combatants at once and return the SORTED turn order, then persist it so a later call can read it back. '
+      + "Rolls d20 + each combatant's initiative modifier through the same dice path as dnd_roll. "
+      + "Honours the campaign's roll_mode: in `players` mode a PC is NEVER rolled for - supply the player's number via `rolls` and it joins the order, otherwise it is reported as pending. "
+      + 'NPCs and monsters are always rolled. '
+      + 'With no `combatants`, reads back the order already stored for this encounter.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
         combatants: {
-          type: "array",
-          description:
-            'Who is in the fight. Either names (["Alice", "Goblin"]) or objects ({ name, kind: "pc"|"npc", mod }). A bare name is an NPC. Omit to READ BACK the stored order.',
+          type: 'array',
+          description: 'Who is in the fight. Either names (["Alice", "Goblin"]) or objects ({ name, kind: "pc"|"npc", mod }). A bare name is an NPC. Omit to READ BACK the stored order.',
         },
         rolls: {
-          type: "object",
-          description:
-            'Player-rolled d20 values, by combatant name: { "Alice": 14 }. Required for a PC in `players` mode, since the tool will not roll for them.',
+          type: 'object',
+          description: 'Player-rolled d20 values, by combatant name: { "Alice": 14 }. Required for a PC in `players` mode, since the tool will not roll for them.',
         },
         character: {
-          type: "string",
-          description:
-            "Which character's encounter file holds the turn order. Required when the campaign has more than one character.",
+          type: 'string',
+          description: "Which character's encounter file holds the turn order. Required when the campaign has more than one character.",
         },
         mode: {
-          type: "string",
-          description:
-            'Override the campaign\'s roll_mode: "players" (never roll for a PC) or "dm"/"auto" (roll everything).',
-          enum: ["players", "dm", "auto"],
+          type: 'string',
+          description: "Override the campaign's roll_mode: \"players\" (never roll for a PC) or \"dm\"/\"auto\" (roll everything).",
+          enum: ['players', 'dm', 'auto'],
         },
-        round: {
-          type: "integer",
-          description: "Round number to record. Defaults to 1.",
-        },
-        key: {
-          type: "string",
-          description:
-            "Idempotency key. Repeating a call with the same key re-reads rather than re-rolling.",
-        },
+        round: { type: 'integer', description: 'Round number to record. Defaults to 1.' },
+        key: { type: 'string', description: 'Idempotency key. Repeating a call with the same key re-reads rather than re-rolling.' },
       },
     },
-    output: { schema: { type: "string" }, render: renderText },
+    output: { schema: { type: 'string' }, render: renderText },
     async execute(args, exec) {
-      const fs = getFs();
-      if (fs === undefined) return "fs service unavailable";
+      const fs = getFs()
+      if (fs === undefined) return 'fs service unavailable'
 
-      const located = await locateEncounter(
-        fs,
-        args.character,
-        sessionOf(ctx, exec)
-      );
-      if (located.error !== undefined) return located.error;
-      const dir = located.dir;
-      const stem = located.stem;
-      const modOf = located.modOf;
+      const located = await locateEncounter(fs, args.character, sessionOf(ctx, exec))
+      if (located.error !== undefined) return located.error
+      const dir = located.dir
+      const stem = located.stem
+      const modOf = located.modOf
 
       // --- READ-BACK path ------------------------------------------------
       // No combatants means "tell me the order again". This is the whole point
       // of persisting: the previous call's ordering must survive into this one.
-      if (
-        args.combatants === undefined ||
-        args.combatants === null ||
-        (Array.isArray(args.combatants) && args.combatants.length === 0)
-      ) {
-        const read = await readEncounter(fs, dir, stem);
-        const section = sectionOf(read.encounter, INITIATIVE_SECTION);
+      if (args.combatants === undefined || args.combatants === null
+        || (Array.isArray(args.combatants) && args.combatants.length === 0)) {
+        const read = await readEncounter(fs, dir, stem)
+        const section = sectionOf(read.encounter, INITIATIVE_SECTION)
         if (section === undefined || section === null) {
-          return (
-            "No initiative order is stored for " +
-            stem +
-            ' yet. Roll one with dnd_initiative, e.g. combatants ["Alice", "Goblin"].'
-          );
+          return 'No initiative order is stored for ' + stem + ' yet. Roll one with dnd_initiative, e.g. combatants ["Alice", "Goblin"].'
         }
         if (section.ended === true) {
-          return (
-            "The encounter on " +
-            stem +
-            " was ended. Roll a new one with dnd_initiative."
-          );
+          return 'The encounter on ' + stem + ' was ended. Roll a new one with dnd_initiative.'
         }
         return renderTurnOrder({
           ordered: Array.isArray(section.order) ? section.order : [],
           pending: Array.isArray(section.pending) ? section.pending : [],
-          mode: section.mode ?? "players",
-          modeSource: section.modeSource ?? "default",
+          mode: section.mode ?? 'players',
+          modeSource: section.modeSource ?? 'default',
           modeRaw: section.modeRaw ?? null,
           character: stem,
           round: section.round ?? 1,
           written: true,
           warnings: read.warnings,
-        });
+        })
       }
 
-      const parsed = parseCombatants(args.combatants);
-      if (parsed.error !== undefined) return parsed.error;
-      const supplied = parseSuppliedRolls(args.rolls);
-      if (supplied.error !== undefined) return supplied.error;
+      const parsed = parseCombatants(args.combatants)
+      if (parsed.error !== undefined) return parsed.error
+      const supplied = parseSuppliedRolls(args.rolls)
+      if (supplied.error !== undefined) return supplied.error
 
       // The mode: an explicit argument wins, otherwise the campaign's flag.
-      const explicitMode =
-        args.mode !== undefined && String(args.mode).trim() !== "";
-      const campaignRollMode = explicitMode
-        ? null
-        : await readRollMode(fs, dir + "/..");
-      const mode = explicitMode
-        ? normalizeRollMode(args.mode)
-        : campaignRollMode.mode;
-      const modeSource = explicitMode ? "argument" : campaignRollMode.source;
-      const modeRaw = explicitMode ? String(args.mode) : campaignRollMode.raw;
+      const explicitMode = args.mode !== undefined && String(args.mode).trim() !== ''
+      const campaignRollMode = explicitMode ? null : await readRollMode(fs, dir + '/..')
+      const mode = explicitMode ? normalizeRollMode(args.mode) : campaignRollMode.mode
+      const modeSource = explicitMode ? 'argument' : campaignRollMode.source
+      const modeRaw = explicitMode ? String(args.mode) : campaignRollMode.raw
 
-      const round = parseInt10(args.round) ?? 1;
+      const round = parseInt10(args.round) ?? 1
 
-      const existing = await readEncounter(fs, dir, stem);
-      const priorSection = sectionOf(existing.encounter, INITIATIVE_SECTION);
+      const existing = await readEncounter(fs, dir, stem)
+      const priorSection = sectionOf(existing.encounter, INITIATIVE_SECTION)
 
       // --- REROLL GUARD ---------------------------------------------------
       // Without a guard, a second call with the same combatants silently
       // re-rolls every die and the table's initiative changes under them. An
       // explicit key makes the retry safe; without a key the caller asked for a
       // fresh roll, which is legitimate (a new fight).
-      const key =
-        args.key === undefined ||
-        args.key === null ||
-        String(args.key).trim() === ""
-          ? null
-          : String(args.key).trim();
-      if (
-        key !== null &&
-        priorSection !== undefined &&
-        priorSection !== null &&
-        priorSection.key === key
-      ) {
+      const key = args.key === undefined || args.key === null || String(args.key).trim() === ''
+        ? null
+        : String(args.key).trim()
+      if (key !== null && priorSection !== undefined && priorSection !== null && priorSection.key === key) {
         return renderTurnOrder({
           ordered: Array.isArray(priorSection.order) ? priorSection.order : [],
-          pending: Array.isArray(priorSection.pending)
-            ? priorSection.pending
-            : [],
+          pending: Array.isArray(priorSection.pending) ? priorSection.pending : [],
           mode: priorSection.mode ?? mode,
           modeSource: priorSection.modeSource ?? modeSource,
           modeRaw: priorSection.modeRaw ?? modeRaw,
           character: stem,
           round: priorSection.round ?? round,
           written: true,
-          warnings: [
-            ...existing.warnings,
-            "Already rolled with this key; the existing order was re-read, not re-rolled.",
-          ],
-        });
+          warnings: [...existing.warnings, 'Already rolled with this key; the existing order was re-read, not re-rolled.'],
+        })
       }
 
-      const outcome = await resolveInitiative(
-        parsed.entries,
-        supplied.rolls,
-        mode,
-        modOf
-      );
-      const ordered = sortTurnOrder(outcome.resolved);
+      const outcome = await resolveInitiative(parsed.entries, supplied.rolls, mode, modOf)
+      const ordered = sortTurnOrder(outcome.resolved)
 
       const section = {
         key,
@@ -795,101 +634,72 @@ export function buildTools(ctx) {
         rollsSupplied: outcome.rollsSupplied,
         order: ordered,
         pending: outcome.pending,
-      };
+      }
 
-      let written = true;
-      const warnings = [...existing.warnings];
+      let written = true
+      const warnings = [...existing.warnings]
       try {
         await writeEncounter(
-          fs,
-          dir,
-          stem,
+          fs, dir, stem,
           mergeEncounter(existing.encounter, INITIATIVE_SECTION, section),
-          policyFor(exec)
-        );
+          policyFor(exec),
+        )
       } catch (error) {
         // A refused write must not lose the rolls: the order is still returned
         // so the DM can run the fight, with the failure stated rather than
         // hidden behind a success message.
-        written = false;
-        warnings.push(
-          "the turn order could not be written (" +
-            (error && error.message ? error.message : error) +
-            "); it is shown below but will not survive the next call"
-        );
+        written = false
+        warnings.push('the turn order could not be written (' + (error && error.message ? error.message : error) + '); it is shown below but will not survive the next call')
       }
 
       return renderTurnOrder({
-        ordered,
-        pending: outcome.pending,
-        mode,
-        modeSource,
-        modeRaw,
-        character: stem,
-        round,
-        written,
-        warnings,
-      });
+        ordered, pending: outcome.pending, mode, modeSource, modeRaw,
+        character: stem, round, written, warnings,
+      })
     },
-  };
+  }
 
   const end = {
-    name: "dnd_initiative_end",
+    name: 'dnd_initiative_end',
     description:
-      "End the encounter stored for a character: clears the initiative/turn-order section of the encounter file and leaves any other encounter state (live effects, concentration) untouched. " +
-      "The file itself is kept: the fs service exposes no delete, and the timed-effects family may still hold state in it. " +
-      "Reports whether there was an order to end.",
+      'End the encounter stored for a character: clears the initiative/turn-order section of the encounter file and leaves any other encounter state (live effects, concentration) untouched. '
+      + 'The file itself is kept: the fs service exposes no delete, and the timed-effects family may still hold state in it. '
+      + 'Reports whether there was an order to end.',
     parameters: {
-      type: "object",
+      type: 'object',
       properties: {
-        character: {
-          type: "string",
-          description:
-            "Character name or stem. Omit when the campaign has exactly one.",
-        },
+        character: { type: 'string', description: 'Character name or stem. Omit when the campaign has exactly one.' },
       },
     },
-    output: { schema: { type: "string" }, render: renderText },
+    output: { schema: { type: 'string' }, render: renderText },
     async execute(args, exec) {
-      const fs = getFs();
-      if (fs === undefined) return "fs service unavailable";
+      const fs = getFs()
+      if (fs === undefined) return 'fs service unavailable'
 
-      const located = await locateEncounter(
-        fs,
-        args.character,
-        sessionOf(ctx, exec)
-      );
-      if (located.error !== undefined) return located.error;
-      const dir = located.dir;
-      const stem = located.stem;
+      const located = await locateEncounter(fs, args.character, sessionOf(ctx, exec))
+      if (located.error !== undefined) return located.error
+      const dir = located.dir
+      const stem = located.stem
 
-      const existing = await readEncounter(fs, dir, stem);
+      const existing = await readEncounter(fs, dir, stem)
       if (!existing.exists) {
-        return "No encounter file for " + stem + "; there was nothing to end.";
+        return 'No encounter file for ' + stem + '; there was nothing to end.'
       }
 
       // The section name is passed EXPLICITLY. This helper is shared with the
       // timed-effects family, and a hard-coded default is how one family would
       // clear the other's section. See encounter-io.mjs.
       const cleared = await clearEncounterSection(
-        fs,
-        dir,
-        stem,
-        existing.encounter,
-        INITIATIVE_SECTION,
+        fs, dir, stem, existing.encounter, INITIATIVE_SECTION,
         { ended: true, endedAt: new Date().toISOString() },
-        policyFor(exec)
-      );
+        policyFor(exec),
+      )
 
       return cleared.hadSection
-        ? "Encounter ended for " +
-            stem +
-            ": the initiative order was cleared. Other encounter state was left untouched."
-        : "No initiative order was stored for " +
-            stem +
-            "; the encounter file was left unchanged.";
+        ? 'Encounter ended for ' + stem + ': the initiative order was cleared. Other encounter state was left untouched.'
+        : 'No initiative order was stored for ' + stem + '; the encounter file was left unchanged.'
     },
-  };
+  }
 
-  return [initiative, end];
+  return [initiative, end]
 }
