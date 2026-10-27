@@ -179,12 +179,12 @@ export function buildTools(ctx) {
       const written = []
       try {
         for (const [path, text] of files) {
-          await fs.writeText(await fs.resolve(`${root}/${path}`), text, undefined, undefined, policy)
+          await writeFile(fs, `${root}/${path}`, text, { policy })
           written.push(path)
         }
         if (args.activate !== false) {
           const marker = `${root}/.runtime/active-campaign.json`
-          await fs.writeText(await fs.resolve(marker), JSON.stringify({ name }) + '\n', undefined, undefined, policy)
+          await writeFile(fs, marker, JSON.stringify({ name }) + '\n', { policy })
           written.push(marker)
         }
       } catch (error) {
@@ -284,7 +284,7 @@ export function buildTools(ctx) {
         const previous = await readActiveCampaign(fs, { header: { cwd: root } })
         try {
           await withWriteDiagnosis(
-            async () => fs.writeText(await fs.resolve(marker), JSON.stringify({ name: rawName }) + '\n', undefined, undefined, policy),
+            async () => writeFile(fs, marker, JSON.stringify({ name: rawName }) + '\n', { policy }),
             { policy, operation: 'active-campaign marker write' },
           )
         } catch (error) {
@@ -345,7 +345,7 @@ export function buildTools(ctx) {
           const out = joinDoc(doc.preamble, doc.sections)
           try {
             await withWriteDiagnosis(
-              async () => fs.writeText(await fs.resolve(path), out, undefined, undefined, policy),
+              async () => writeFile(fs, path, out, { policy }),
               { policy, operation: 'campaign document write' },
             )
           } catch (error) {
@@ -391,7 +391,7 @@ export function buildTools(ctx) {
           const out = joinDoc(doc.preamble, doc.sections)
           try {
             await withWriteDiagnosis(
-              async () => fs.writeText(await fs.resolve(path), out, undefined, undefined, policy),
+              async () => writeFile(fs, path, out, { policy }),
               { policy, operation: 'campaign document write' },
             )
           } catch (error) {
@@ -449,7 +449,7 @@ export function buildTools(ctx) {
 
         try {
           await withWriteDiagnosis(
-            async () => fs.writeText(await fs.resolve(path), out, undefined, undefined, policy),
+            async () => writeFile(fs, path, out, { policy }),
             { policy, operation: 'campaign document write' },
           )
         } catch (error) {

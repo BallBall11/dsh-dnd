@@ -56,7 +56,7 @@
  * from the harness process's cwd (see session-scope.mjs).
  */
 
-import { activeCampaignDir, parseJsonLoose } from './shared.mjs'
+import { activeCampaignDir, parseJsonLoose, writeFile } from './shared.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
 
@@ -323,7 +323,7 @@ export function buildTools(ctx) {
       // Translated on refusal so a denial is actionable rather than a bare
       // restatement of the mode (T7).
       await withWriteDiagnosis(
-        async () => fs.writeText(await fs.resolve(path), JSON.stringify(next, null, 2) + '\n', undefined, undefined, policy),
+        async () => writeFile(fs, path, JSON.stringify(next, null, 2) + '\n', { policy }),
         { policy, operation: 'calendar write', campaign: located.campaign },
       )
 

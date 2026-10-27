@@ -225,6 +225,31 @@ export async function readCampaignRuleset(fs, dir) {
 }
 
 /**
+ * The one write adapter.
+ *
+ * The platform's `writeText(target, text, expected?, signal?, policy?)` is
+ * positional, and the policy is its FIFTH argument behind two anonymous
+ * holes. A module that writes those five arguments by hand encodes the
+ * platform's parameter list at its own call site — misplace the policy one
+ * slot left and the write is judged against the wrong root, silently. All
+ * writes go through here: the policy stays a named option and the positional
+ * shape is written down exactly once.
+ *
+ * `policy` may be undefined, and that is a meaningful value (ADR-0006: no
+ * session means refused, never widened), so it is forwarded as-is and never
+ * replaced with a default.
+ *
+ * @param fs - the host fs service.
+ * @param path - the path to write; resolved here.
+ * @param text - the file contents.
+ * @param options - `{ policy }`: the calling session's resolved sandbox
+ *   policy, or undefined.
+ */
+export async function writeFile(fs, path, text, { policy } = {}) {
+  await fs.writeText(await fs.resolve(path), text, undefined, undefined, policy)
+}
+
+/**
  * Test whether a path exists.
  * @param fs - the host fs service.
  * @param path - absolute path in the fs service's own coordinate space.

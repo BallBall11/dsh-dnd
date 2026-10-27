@@ -51,7 +51,7 @@
  * file is a decision for a writer.
  */
 
-import { readTextOrUndefined, parseJsonLoose, listFiles } from './shared.mjs'
+import { readTextOrUndefined, parseJsonLoose, listFiles, writeFile } from './shared.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
 
 /** The section this module's own tool family owns. */
@@ -206,7 +206,7 @@ export async function writeEncounter(fs, dir, name, encounter, sandboxPolicy) {
   // instead of restating the mode (T7). Both encounter families go through
   // here, so both get the same message.
   await withWriteDiagnosis(
-    async () => fs.writeText(await fs.resolve(path), text, undefined, undefined, sandboxPolicy),
+    async () => writeFile(fs, path, text, { policy: sandboxPolicy }),
     { policy: sandboxPolicy, operation: 'encounter write' },
   )
   return { path }
