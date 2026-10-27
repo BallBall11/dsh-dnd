@@ -171,6 +171,7 @@ import {
 import { activeCampaignDir } from './shared.mjs'
 import { readCharacter, writeCharacter, listCharacters } from './state-io.mjs'
 import { normalizeState } from './state-schema.mjs'
+import { makeLockChain, recordAppliedKey, locateCharacter } from './write-pipeline.mjs'
 import { readCalendar } from './clock.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
@@ -220,9 +221,9 @@ export const APPLIED_KEYS_SECTION = 'appliedKeys'
 /**
  * How many idempotency keys the encounter file remembers.
  *
- * Mirrors `MAX_APPLIED_KEYS` in state-schema.mjs so the two ledgers behave
- * identically. Newest last, oldest dropped: the cap is what stops this becoming
- * an append-only log of every call ever made.
+ * The mechanism is the shared record helper (write-pipeline.mjs); this is just
+ * this ledger's own cap. Newest last, oldest dropped: the cap is what stops
+ * this becoming an append-only log of every call ever made.
  */
 export const MAX_ENCOUNTER_KEYS = 32
 
@@ -254,8 +255,7 @@ export function asKeyList(value) {
  * @param key - the key just applied.
  */
 export function withKeyRecorded(keys, key) {
-  const next = [...asKeyList(keys).filter((k) => k !== key), key]
-  return next.slice(Math.max(0, next.length - MAX_ENCOUNTER_KEYS))
+  return recordAppliedKey(keys, key, MAX_ENCOUNTER_KEYS).next
 }
 
 /**
@@ -630,94 +630,25 @@ export function verdictSentence(characterName, verdict, tally) {
 const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
 /**
- * The tail of each character's encounter write chain.
+ * Run `work` with exclusive access to one character's ENCOUNTER file.
  *
- * The same reason track.mjs has one, and the same shape: a read-modify-write of
- * a shared file is not safe to interleave with itself. Two overlapping
- * `dnd_effect` calls that each read `{ effects: [] }` and each write their own
- * effect would lose one of them, and both would report success.
+ * The queueing mechanism is the shared lock builder, but this is a SEPARATE
+ * queue from the character write path's, deliberately: the two families write
+ * DIFFERENT files, so serializing them against each other would make a
+ * hit-point change queue behind an unrelated effect tick. The encounter file
+ * has exactly two writing families — this one and the initiative tools — and
+ * BOTH take this chain. Two chains would be two locks, and two locks provide
+ * no mutual exclusion at all, which is why the encounter family must keep
+ * taking THIS instance and never the pipeline's own.
  *
- * It is a SEPARATE chain from track.mjs's `writeChains`, and that is deliberate
- * rather than an oversight: the two families write DIFFERENT files, so
- * serializing them against each other would make a hit-point change queue behind
- * an unrelated effect tick. The encounter file has exactly two writing
- * families 鈥?this one and T8's initiative tools 鈥?and BOTH take this chain.
- * Two chains would be two locks, and two locks provide no mutual exclusion at
- * all, which is the failure this function exists to prevent.
- *
- * @type {Map<string, Promise<unknown>>}
- */
-const encounterChains = new Map()
-
-/**
- * Run `work` with exclusive access to one character's encounter file.
- *
- * Exported so the initiative family shares this ONE chain rather than keeping a
- * second map.
- *
- * The whole read-modify-write must be inside `work`. Queuing only the write
- * would preserve the lost update, because the stale read happens first.
+ * Exported so the initiative family shares this ONE chain rather than keeping
+ * a second one.
  *
  * @param key - lock key, `campaign/character` lowercased.
  * @param work - `() => Promise<T>`; the entire locate-read-mutate-write.
  * @template T
  */
-export async function withEncounterLock(key, work) {
-  const prior = encounterChains.get(key) ?? Promise.resolve()
-  const run = prior.then(work, work)
-  // The stored link must never reject, or one failed write would poison that
-  // character's chain permanently.
-  const link = run.then(() => undefined, () => undefined)
-  encounterChains.set(key, link)
-  try {
-    return await run
-  } finally {
-    // Only clear the entry if nobody queued behind us; comparing identity is
-    // what keeps a third caller from jumping the queue.
-    if (encounterChains.get(key) === link) encounterChains.delete(key)
-  }
-}
-
-/**
- * Locate a character for an encounter-scoped operation.
- *
- * Mirrors track.mjs's `locateCharacter` on purpose 鈥?the same substring match,
- * the same "omit the name when the campaign has one character" convenience, and
- * the same error wording 鈥?so a DM does not have to learn which tool addresses
- * characters differently.
- *
- * @param fs - the host fs service.
- * @param requested - the caller's `character` argument.
- * @returns `{ dir, campaign, name }` or `{ error }`.
- */
-async function locateCharacter(fs, requested, session) {
-  const located = await activeCampaignDir(fs, session)
-  if (located?.error !== undefined) return { error: located.error }
-  if (located === undefined) {
-    return { error: 'No active campaign. Load one with /dm:dnd load <campaign> first.' }
-  }
-  const dir = located.dir + '/characters'
-  const listed = await listCharacters(fs, dir)
-  if (listed.length === 0) return { error: 'No characters in campaign ' + located.campaign + '.' }
-
-  let name
-  if (requested !== undefined && String(requested).trim() !== '') {
-    const wanted = String(requested).toLowerCase().trim()
-    const match = listed.find((c) => c.name.toLowerCase() === wanted)
-      ?? listed.find((c) => c.name.toLowerCase().includes(wanted))
-    if (match === undefined) {
-      const available = listed.map((c) => c.name).join(', ')
-      return { error: 'Character "' + requested + '" not found in ' + located.campaign + '. Available: ' + available }
-    }
-    name = match.name
-  } else if (listed.length === 1) {
-    name = listed[0].name
-  } else {
-    const available = listed.map((c) => c.name).join(', ')
-    return { error: 'Which character? ' + located.campaign + ' has ' + listed.length + ': ' + available }
-  }
-  return { dir, campaign: located.campaign, name }
-}
+export const withEncounterLock = makeLockChain()
 
 /** A section that should be an array of effects, made safe to iterate. */
 function asEffectList(value) {

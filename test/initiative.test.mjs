@@ -511,7 +511,7 @@ await test('a missing combatants array is diagnosed, not treated as empty', asyn
 await test('a missing character is diagnosed rather than rolled against the wrong sheet', async () => {
   // Two characters exist in initcamp, so omitting `character` is ambiguous.
   const out = await call('dnd_initiative', { combatants: ['Goblin'] })
-  assert.match(out, /encounter file should hold the turn order/, out)
+  assert.match(out, /Which character\? initcamp has/, out)
   assert.match(out, /alice/, out)
   assert.match(out, /bob/, out)
 })

@@ -57,6 +57,7 @@
  */
 
 import { activeCampaignDir, parseJsonLoose, writeFile } from './shared.mjs'
+import { recordAppliedKey } from './write-pipeline.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
 
@@ -79,7 +80,7 @@ export const HOURS_PER_UNIT = { hour: 1, hours: 1, day: 24, days: 24, week: 168,
  */
 export const REST_HOURS = { short: 1, long: 8 }
 
-/** How many idempotency keys the calendar file remembers. Mirrors MAX_APPLIED_KEYS. */
+/** How many idempotency keys the calendar file remembers; the mechanism is the shared record helper. */
 export const MAX_CALENDAR_KEYS = 32
 
 const numOr = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
@@ -313,9 +314,9 @@ export function buildTools(ctx) {
       }
       if (key !== null) {
         // The key list lives in the calendar file itself, so a retry is caught
-        // even after a restart. Bounded, like the character write path's.
-        const keys = [...applied.filter((k) => k !== key), key]
-        next.appliedKeys = keys.slice(Math.max(0, keys.length - MAX_CALENDAR_KEYS))
+        // even after a restart. Bounded, like the character write path's; the
+        // mechanism is the shared record helper.
+        next.appliedKeys = recordAppliedKey(applied, key, MAX_CALENDAR_KEYS).next
       }
 
       const policy = writePolicyFor(ctx, exec)

@@ -80,6 +80,7 @@
 import { activeCampaignDir, findSection, readTextOrUndefined } from './shared.mjs'
 import { readCharacter, listCharacters } from './state-io.mjs'
 import { rollD20 } from './roll.mjs'
+import { matchCharacter } from './write-pipeline.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import {
   INITIATIVE_SECTION,
@@ -480,25 +481,11 @@ export function buildTools(ctx) {
       return { error: 'No characters in campaign ' + located.campaign + ', so there is nowhere to keep the turn order.' }
     }
 
-    let stem
-    if (requested !== undefined && String(requested).trim() !== '') {
-      const wanted = String(requested).toLowerCase().trim()
-      const match = listed.find((c) => c.name.toLowerCase() === wanted)
-        ?? listed.find((c) => c.name.toLowerCase().includes(wanted))
-      if (match === undefined) {
-        const available = listed.map((c) => c.name).join(', ')
-        return { error: 'Character "' + requested + '" not found in ' + located.campaign + '. Available: ' + available }
-      }
-      stem = match.name
-    } else if (listed.length === 1) {
-      stem = listed[0].name
-    } else {
-      // The order is stored per character, so with several characters the tool
-      // must not guess: guessing would write the fight onto the wrong sheet and
-      // the next read would look for it somewhere else.
-      const available = listed.map((c) => c.name).join(', ')
-      return { error: "Which character's encounter file should hold the turn order? " + located.campaign + ' has ' + listed.length + ': ' + available + '. Pass `character`.' }
-    }
+    // The tiers (exact, stem, substring, sole character) are the shared matcher's;
+    // the empty-roster case above keeps this family's own message.
+    const match = matchCharacter(listed, requested, located.campaign)
+    if (match.error !== undefined) return match
+    const stem = match.name
 
     // Combatant names come from the DM's mouth, not the filesystem, so each
     // one resolves to a real character stem exactly like `character` above:
