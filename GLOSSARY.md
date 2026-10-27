@@ -100,6 +100,14 @@ instead of silently clamped away. A plausible number that is not true is the
 failure this design refuses to ship.
 _Avoid_: error, warning
 
+**Write Pipeline**:
+The one seam every character write enters. Resolution, per-character
+locking, keyed idempotency, both clocks, refusal translation and the
+session's policy live behind its interface; a tool contributes only its
+rules and its arguments. A write that bypasses the pipeline is a defect,
+not a shortcut.
+_Avoid_: ad-hoc write, direct write
+
 **Idempotency Key**:
 An optional, caller-chosen key that makes a repeated write a no-op reported as
 a duplicate, so a retry cannot double-charge.
