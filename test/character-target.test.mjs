@@ -63,6 +63,7 @@ import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { buildTools } from '../src/host/tools/track.mjs'
+import { matchCharacter } from '../src/host/tools/write-pipeline.mjs'
 process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the env root is the explicit config
 
 let failures = 0
@@ -434,3 +435,18 @@ if (failures > 0) {
   process.exit(1)
 }
 console.log('character-target.test.mjs: all assertions passed')
+
+// The shared matcher's file-stem tier: a roster entry may carry a `file` field
+// distinct from its display name, and requesting the stem resolves to it. The
+// directory listing never sets  (name IS the stem there), so this tier
+// exists for rosters that carry both — pinned here so it cannot rot silently.
+await test('matchCharacter: the file-stem tier resolves a roster entry by its file', () => {
+  const roster = [
+    { name: 'Alice', file: 'alice.md' },
+    { name: 'Hawk', file: 'hawk-the-ranger.md' },
+  ]
+  assert.deepEqual(matchCharacter(roster, 'hawk-the-ranger', 'tier-camp'), { name: 'Hawk' })
+  assert.deepEqual(matchCharacter(roster, 'alice', 'tier-camp'), { name: 'Alice' })
+  assert.deepEqual(matchCharacter(roster, 'ALICE', 'tier-camp'), { name: 'Alice' })
+  assert.match(String(matchCharacter(roster, 'nobody', 'tier-camp').error), /not found in tier-camp/)
+})

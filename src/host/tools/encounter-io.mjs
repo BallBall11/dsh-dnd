@@ -182,8 +182,8 @@ export function sectionOf(encounter, sectionName) {
  *
  * ## The sandbox policy travels the same path as every other write
  *
- * `sandboxPolicy` is forwarded as the 5th argument to `fs.writeText`, exactly
- * as state-io.mjs does. That argument decides which ROOT the write is judged
+ * `sandboxPolicy` is handed to the shared `writeFile` adapter, exactly as
+ * state-io.mjs does. That argument decides which ROOT the write is judged
  * against; omitting it is the defect that made every campaign write refusable,
  * because the fs sandbox then falls back to a root derived from the harness
  * process's cwd. The caller resolves it from the tool call's own session (see

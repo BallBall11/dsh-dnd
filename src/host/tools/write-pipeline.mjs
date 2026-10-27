@@ -54,7 +54,7 @@ import { writeProbeState } from './write-probe.mjs'
  * @param text - the write's normal result text.
  * @returns the text, with the advisory prepended when there is one.
  */
-function withProbeAdvisory(text) {
+export function withProbeAdvisory(text) {
   const note = writeProbeState()?.note()
   return note === undefined ? text : note + '\n\n' + text
 }
@@ -109,7 +109,9 @@ export function makeLockChain() {
  * @param key - the key just applied (already trimmed; non-empty).
  * @param cap - how many keys the ledger remembers.
  * @returns `{ duplicate, next }` — `duplicate` when `key` was already present
- *   (callers report it as a no-op), `next` the array to store back.
+ *   (callers report it as a no-op and write nothing, so the list is stored
+ *   back only by a REAL application; the key's position refreshes then), and
+ *   `next` the array to store back.
  */
 export function recordAppliedKey(existing, key, cap = MAX_APPLIED_KEYS) {
   const keys = Array.isArray(existing)
@@ -171,13 +173,18 @@ export function campaignCalendar(fs, charactersDir) {
 }
 
 /**
- * Resolve the character a write tool should act on.
+ * Resolve WHICH character a write should act on: the campaign marker, the
+ * directory listing, and the shared tier match — and no character state.
+ * This is the read that builds lock keys, so it is safe to run outside a
+ * lock: it reads nothing whose content a concurrent write could change in a
+ * way that matters (a write rewrites a sheet's contents without renaming it,
+ * so the stem a name resolves to cannot change underneath it).
  *
  * @param fs - the host fs service.
  * @param requested - the caller's `character` argument, possibly undefined.
- * @returns `{ dir, campaign, name, character }` or `{ error }`.
+ * @returns `{ dir, campaign, name }` or `{ error }`.
  */
-export async function locateCharacter(fs, requested, session) {
+export async function resolveCharacter(fs, requested, session) {
   const located = await activeCampaignDir(fs, session)
   if (located?.error !== undefined) return { error: located.error }
   if (located === undefined) {
@@ -192,13 +199,24 @@ export async function locateCharacter(fs, requested, session) {
 
   const match = matchCharacter(listed, requested, located.campaign)
   if (match.error !== undefined) return match
-  const name = match.name
+  return { dir, campaign: located.campaign, name: match.name }
+}
 
-  const character = await readCharacter(fs, dir, name)
+/**
+ * `resolveCharacter` plus the character's two files — the read a write's
+ * mutation needs. The STATE read here is the one that must be serialized,
+ * which is why the pipeline re-runs it inside the lock.
+ *
+ * @returns `{ dir, campaign, name, character }` or `{ error }`.
+ */
+export async function locateCharacter(fs, requested, session) {
+  const resolved = await resolveCharacter(fs, requested, session)
+  if (resolved.error !== undefined) return resolved
+  const character = await readCharacter(fs, resolved.dir, resolved.name)
   if (character.state === null) {
-    return { error: `Could not read state for "${name}": ${character.warnings.join('; ')}` }
+    return { error: `Could not read state for "${resolved.name}": ${character.warnings.join('; ')}` }
   }
-  return { dir, campaign: located.campaign, name, character }
+  return { ...resolved, character }
 }
 
 /**
@@ -366,7 +384,7 @@ export const withCharacterLock = makeLockChain()
 export async function applyToCharacter(fs, requested, mutate, options = {}) {
   // Resolve the character to a stem OUTSIDE the lock, purely to build a stable
   // key. This is a directory-level read, not a state read.
-  const located0 = await locateCharacter(fs, requested, options.session)
+  const located0 = await resolveCharacter(fs, requested, options.session)
   const lockKey = located0.error !== undefined
     // Nothing resolved: fall back to the raw request so that a repeated failing
     // call still queues with itself rather than racing on the campaign marker.
