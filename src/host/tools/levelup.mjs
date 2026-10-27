@@ -27,7 +27,7 @@
  */
 
 import { activeCampaignDir, readCampaignRuleset, DATA_ROOT, readTextOrUndefined, parseJsonLoose } from './shared.mjs'
-import { locateAndApply } from './write-pipeline.mjs'
+import { applyToCharacter } from './write-pipeline.mjs'
 import { readCharacter, listCharacters } from './state-io.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { abilityMod } from './rest-rules.mjs'
@@ -200,7 +200,7 @@ export function buildTools(ctx) {
       // ── plan-only mode ──────────────────────────────────────────────────
       // The write path has no "report without writing" mode, by design: a
       // mutate that declines must refuse. So planning reads the sheet and
-      // returns; ONLY confirm reaches locateAndApply.
+      // returns; ONLY confirm reaches applyToCharacter.
       if (!confirm) {
         const plan = planLevelUp(preview.state, nextLevel, sheet.row, sheet.hitDie, args.hpGainMode, rollDie)
         const maxBefore = preview.state.combat?.hp?.max
@@ -223,7 +223,7 @@ export function buildTools(ctx) {
       }
 
       const captured = []
-      const outcome = await locateAndApply(fs, name, (located, state) => {
+      const outcome = await applyToCharacter(fs, name, (located, state) => {
         // The plan was built from a pre-lock read. If the sheet's class or
         // level moved since, the plan is stale — refuse rather than advance
         // on numbers nobody saw.

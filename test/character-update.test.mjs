@@ -188,6 +188,21 @@ await test('bad op and missing body are diagnosed before any IO', async () => {
 // ─── the invariants ────────────────────────────────────────────────────────
 section('the invariants')
 
+await test('a no-op edit is refused with a text that says nothing was written', async () => {
+  // The no-op rule the write path lives by: stamping both clocks on a
+  // character nothing happened to is the defect dnd_track refuses, and the
+  // narrative route must refuse it too — whatever seam it travels through.
+  await reset()
+  const before = sheet()
+  const set = await update.execute({ op: 'set-section', section: 'Character Pillar', body: 'Curiosity over caution.' })
+  assert.match(set, /No change:/)
+  assert.match(set, /Nothing was written/)
+  const remove = await update.execute({ op: 'remove', section: 'Backstory & Notes', match: 'no-such-line-marker' })
+  assert.match(remove, /No line in "Backstory & Notes" contains/)
+  assert.match(remove, /Nothing was written/)
+  return sheet() === before
+})
+
 await test('an untouched narrative section stays byte-identical; state numbers unchanged', async () => {
   await reset()
   const before = sheet()

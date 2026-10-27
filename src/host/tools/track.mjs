@@ -54,52 +54,48 @@
  * (or no keys at all) are two legitimate changes, and no key comparison can tell
  * them from one change sent twice.
  *
- * The fix is `withCharacterLock`, which serializes the whole sequence — locate,
- * read, mutate, write — per `campaign/character`. The scope matters and is the
- * part that is easy to get wrong: it is NOT enough to serialize `applyChange`.
- * `locateCharacter` reads the state file, and it runs BEFORE `applyChange`, so
- * two calls can each capture the same stale snapshot and then take turns writing
+ * The serialization lives in the pipeline (`applyToCharacter`): it keys the lock
+ * on the RESOLVED `campaign/character` stem and holds the whole sequence —
+ * locate, read, mutate, write — inside it. The scope matters and is the part
+ * that is easy to get wrong: it is NOT enough to serialize the write half.
+ * `locateCharacter` reads the state file, and it runs BEFORE the write, so two
+ * calls can each capture the same stale snapshot and then take turns writing
  * it back. Serializing only the second half would leave the lost update intact
  * while looking like a fix.
  *
- * The lock is a promise chain in module scope, not a filesystem lock: DSH's host
- * is one process, and a chain is enough to make the read-then-write pairs queue
- * instead of overlap. Module scope rather than per-`buildTools` because a
- * re-mount must not hand out a second, independent chain. Nothing here blocks on
- * anything except other writes to the SAME character, so a slow write to one
- * character never delays another.
+ * The lock is a promise chain in the pipeline's module scope, not a filesystem
+ * lock: DSH's host is one process, and a chain is enough to make the
+ * read-then-write pairs queue instead of overlap. Module scope rather than
+ * per-`buildTools` because a re-mount must not hand out a second, independent
+ * chain. Nothing here blocks on anything except other writes to the SAME
+ * character, so a slow write to one character never delays another.
  *
  * Reads are unaffected: the lock lives in the write path, so `readCharacter` and
  * every read tool still never write and never queue.
+ *
+ * ## The narrative path is a mutate, not its own writer
+ *
+ * `dnd_character_update` enters the SAME seam. Its execute builds an async
+ * mutate that re-reads the sheet INSIDE the lock (`readTextOrUndefined` +
+ * `splitSheet` — reads never queue), runs the structured-section gate and the
+ * section edit, and returns `{ narrative, note }`: the prose the pipeline
+ * should write and the text to report. The pipeline owns the calendar fetch,
+ * the lock, the session-policy threading, the refusal diagnosis and the probe
+ * advisory; a no-op edit is a refusal whose text says nothing was written, so
+ * the clocks never move for a change that did not happen. The narrative path
+ * carries no idempotency key — a repeated identical edit is refused by
+ * content, not by key.
  */
 
 import { readTextOrUndefined } from './shared.mjs'
-import { locateCharacter, withCharacterLock, locateAndApply } from './write-pipeline.mjs'
+import { applyToCharacter } from './write-pipeline.mjs'
 import { applyDamage } from './apply-damage.mjs'
-import { readCalendar } from './clock.mjs'
-import { writeCharacter, sheetPath } from './state-io.mjs'
+import { sheetPath } from './state-io.mjs'
 import { splitSheet, STRUCTURED_SECTIONS } from './sheet-split.mjs'
 import { formatCurrency, formatCurrencyShort, toCopper } from './state-rules.mjs'
 import { MAX_APPLIED_KEYS } from './state-schema.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
-import { writeProbeState, runWriteSelfCheck } from './write-probe.mjs'
-
-/**
- * Prepend the startup probe's warning to a write tool's output, when the probe
- * found the write path refused (T6).
- *
- * The warning goes on the tool's OWN output rather than only the log, because
- * the whole failure mode is that a DM does not look at the log: they see a
- * tool that answered, and assume it saved. Returning undefined from the probe
- * state (unit tests, no mount) shows nothing, which is the honest default.
- *
- * @param text - the tool's normal output.
- * @returns the output, with the advisory prepended when there is one.
- */
-function withProbeAdvisory(text) {
-  const note = writeProbeState()?.note()
-  return note === undefined ? text : note + '\n\n' + text
-}
+import { runWriteSelfCheck } from './write-probe.mjs'
 
 export const name = 'dnd-track'
 
@@ -110,64 +106,117 @@ export { MAX_APPLIED_KEYS }
 const renderText = (_args, value) => [{ type: 'text', text: String(value) }]
 
 /**
- * Apply a narrative-section operation to the parsed sheet and write the
- * character back through `writeCharacter`.
+ * The structured-section gate plus the section edit, computed against the
+ * parsed sheet. PURE: sheet text already split, plan out — no reads, no
+ * writes, no clock.
  *
- * The narrative is rebuilt from the section map the way `splitSheet` itself
- * does it (skip the generated block and structured sections, join raw), so the
- * untouched sections stay byte-identical and the generated block is re-rendered
- * from the authoritative state. A no-op (the section already reads exactly what
- * was passed) writes NOTHING: stamping both clocks on a character nothing
- * happened to is the same defect `dnd_track` refuses.
+ * The gate comes FIRST: a structured section is a refusal WITH DIRECTIONS,
+ * because the request is legitimate — the route is just not this tool.
+ * Editing the .md copy of a structured section changes prose that nothing
+ * reads: the state file decides every number, and the summary re-renders from
+ * it. Both refusals below name the tool that does own the change.
  *
- * @returns the model-facing text.
+ * @param sheet - the `splitSheet` result for the character's .md.
+ * @param request - `{ name, campaign, op, section, body, text, match, create }`,
+ *   the validated tool arguments plus the located names for error wording.
+ * @returns `{ refuse }` when nothing may be written (a structured-section hit,
+ *   an unknown section, or a no-op edit — the text explains why), or
+ *   `{ narrative, note }`: the rebuilt narrative the pipeline should write and
+ *   the default result text to report.
  */
-async function applyCharacterNarrative(fs, dir, name, character, sheet, { op, body, text, match, created, index, sandboxPolicy }) {
+function planNarrativeEdit(sheet, { name, campaign, op, section: sectionName, body, text, match, create }) {
   const sections = sheet.sections
+  const structured = (h) => STRUCTURED_SECTIONS.some((s) => String(h).toLowerCase().startsWith(s))
+  const isGenerated = (h) => h === 'generated' || h === '/dsh-dnd:generated'
+  const wanted = sectionName.toLowerCase()
+  const idx = sections.findIndex((s) => s.heading !== null && !isGenerated(s.heading) && s.heading.toLowerCase() === wanted)
+
+  if (idx === -1) {
+    // The sheet was born through writeCharacter, so its structured sections
+    // have MOVED to the state file and are no longer headings here. The gate
+    // must therefore also recognise a structured NAME directly — "Combat
+    // Stats" is still not this tool's business.
+    const structuredHit = structured(sectionName)
+      || sections.some((s) => s.heading !== null && !isGenerated(s.heading)
+        && structured(s.heading)
+        && (String(s.heading).toLowerCase().includes(wanted) || wanted.includes(String(s.heading).toLowerCase())))
+    if (structuredHit) {
+      return { refuse: 'REFUSED: "' + sectionName + '" is a STRUCTURED section — the state file is the authority, and editing the sheet copy changes text nothing reads. '
+        + 'Numbers: dnd_track (hp, tempHp, spellSlots, spells, xp, conditions, resource) or dnd_spend. '
+        + 'Building or rebuilding the card: dnd_character_create. Nothing was written.' }
+    }
+    const narrativeHeads = sections
+      .filter((s) => s.heading !== null && !isGenerated(s.heading) && !structured(s.heading))
+      .map((s) => s.heading)
+    if (create && op === 'set-section') {
+      sections.push({ heading: sectionName, level: 2, body: '', raw: '## ' + sectionName + '\n' })
+      return applySectionOp(sections, sections.length - 1, { op, body, text, match, created: true })
+    }
+    return { refuse: 'No section "' + sectionName + '" in ' + name + '. Narrative sections: '
+      + (narrativeHeads.join('; ') || 'none') + '. '
+      + 'Pass create:true with op "set-section" to add a new one. Nothing was written.' }
+  }
+  if (structured(sections[idx].heading)) {
+    return { refuse: 'REFUSED: "' + sections[idx].heading + '" is a STRUCTURED section — the state file is the authority, and editing the sheet copy changes text nothing reads. '
+      + 'Numbers: dnd_track (hp, tempHp, spellSlots, spells, xp, conditions, resource) or dnd_spend. '
+      + 'Building or rebuilding the card: dnd_character_create. Nothing was written.' }
+  }
+  return applySectionOp(sections, idx, { op, body, text, match, created: false })
+}
+
+/**
+ * Apply one section op to the sheet's sections and rebuild the narrative from
+ * them. The narrative is rebuilt exactly as `splitSheet` assembles it
+ * (everything that is neither the generated block nor a structured section,
+ * joined raw), so the untouched sections stay byte-identical and the
+ * generated block is re-rendered from the authoritative state.
+ *
+ * A no-op (the section already reads exactly what was passed) is a REFUSAL:
+ * stamping both clocks on a character nothing happened to is the same defect
+ * `dnd_track` refuses, and "nothing was written" is said in as many words.
+ *
+ * @returns `{ refuse }` for a no-op, or `{ narrative, note }` for an edit.
+ */
+function applySectionOp(sections, index, { op, body, text, match, created }) {
+  const section = sections[index]
   let note = ''
-  let changed = false
 
   if (op === 'set-section') {
-    const s = sections[index]
-    const heading = '#'.repeat(s.level) + ' ' + s.heading
+    const heading = '#'.repeat(section.level) + ' ' + section.heading
     const nextRaw = heading + '\n\n' + body.trim() + '\n'
-    if (nextRaw === s.raw) {
-      return 'No change: "' + s.heading + '" already contains exactly that content. Nothing was written.'
+    if (nextRaw === section.raw) {
+      return { refuse: 'No change: "' + section.heading + '" already contains exactly that content. Nothing was written.' }
     }
-    sections[index] = { ...s, raw: nextRaw, body: body.trim() }
+    sections[index] = { ...section, raw: nextRaw, body: body.trim() }
     note = created
-      ? 'Created section "' + s.heading + '" and wrote the content.'
-      : 'Section "' + s.heading + '" replaced.'
-    changed = true
+      ? 'Created section "' + section.heading + '" and wrote the content.'
+      : 'Section "' + section.heading + '" replaced.'
   } else if (op === 'append') {
-    const s = sections[index]
     const lines = text.replace(/\r\n/g, '\n').split('\n')
-    const nextRaw = s.raw.replace(/\n*$/, '\n') + lines.join('\n') + '\n'
-    if (nextRaw === s.raw) {
-      return 'No change: the appended text is already present verbatim at the end. Nothing was written.'
+    const nextRaw = section.raw.replace(/\n*$/, '\n') + lines.join('\n') + '\n'
+    if (nextRaw === section.raw) {
+      return { refuse: 'No change: the appended text is already present verbatim at the end. Nothing was written.' }
     }
-    sections[index] = { ...s, raw: nextRaw, body: s.body.replace(/\n*$/, '\n') + lines.join('\n') }
-    note = 'Appended ' + lines.length + ' line(s) to "' + s.heading + '".'
-    changed = true
+    sections[index] = { ...section, raw: nextRaw, body: section.body.replace(/\n*$/, '\n') + lines.join('\n') }
+    note = 'Appended ' + lines.length + ' line(s) to "' + section.heading + '".'
   } else if (op === 'remove') {
-    const s = sections[index]
-    const lines = s.raw.replace(/\n*$/, '').split('\n')
+    const lines = section.raw.replace(/\n*$/, '').split('\n')
     const kept = lines.filter((l) => !l.includes(match))
     const dropped = lines.length - kept.length
     if (dropped === 0) {
       const sample = lines.slice(1, 6).join('\n')
-      return 'No line in "' + s.heading + '" contains "' + match + '". '
-        + (sample !== '' ? 'Section starts:\n' + sample : 'The section is empty.') + ' Nothing was written.'
+      return { refuse: 'No line in "' + section.heading + '" contains "' + match + '". '
+        + (sample !== '' ? 'Section starts:\n' + sample : 'The section is empty.') + ' Nothing was written.' }
     }
-    sections[index] = { ...s, raw: kept.join('\n') + '\n', body: kept.slice(1).join('\n') }
-    note = 'Removed ' + dropped + ' line(s) from "' + s.heading + '".'
-    changed = true
+    sections[index] = { ...section, raw: kept.join('\n') + '\n', body: kept.slice(1).join('\n') }
+    note = 'Removed ' + dropped + ' line(s) from "' + section.heading + '".'
+  } else {
+    // Unreachable through dnd_character_update.execute, which validates `op`
+    // before anything is read. Backstop for a direct caller of this function:
+    // silently proceeding would stamp both clocks on an unedited character.
+    return { refuse: 'Nothing was written.' }
   }
 
-  if (!changed) return 'Nothing was written.'
-
-  // Rebuild the narrative exactly as splitSheet assembles it: everything that
-  // is neither the generated block nor a structured section, byte-for-byte.
   const isGenerated = (h) => h === 'generated' || h === '/dsh-dnd:generated'
   const structured = (h) => STRUCTURED_SECTIONS.some((x) => String(h).toLowerCase().startsWith(x))
   const narrative = sections
@@ -176,23 +225,10 @@ async function applyCharacterNarrative(fs, dir, name, character, sheet, { op, bo
     .join('\n')
     .trim()
 
-  // The calendar lives at the CAMPAIGN root, one level above the characters
-  // directory this function receives — the same `dir/..` walk writeOptions
-  // does. Reading `dir` itself looked for `characters/calendar.json`, which
-  // nothing creates, and stamped `worldTime: null` over the world clock on
-  // every dnd_character_update.
-  const calendar = await readCalendar(fs, dir + '/..')
-  const result = await writeCharacter(fs, dir, name, {
-    state: character.state,
+  return {
     narrative,
-    calendar,
-    sandboxPolicy,
-  })
-  if (result.refused) {
-    return 'dnd_character_update refused — ' + result.reason + ' Nothing was written.'
+    note: note + ' The generated summary was re-rendered from the state file; the numbers did not change.',
   }
-  for (const line of result.warnings ?? []) note += '\n' + line
-  return note + ' The generated summary was re-rendered from the state file; the numbers did not change.'
 }
 
 /**
@@ -277,7 +313,7 @@ export function buildTools(ctx) {
       const changes = []
       // T6: the first real write triggers the self-check, using this call's own
       // session policy. It is detached so it can never delay or fail the write.
-      const outcome = await locateAndApply(fs, args.character, (located, state) => {
+      const outcome = await applyToCharacter(fs, args.character, (located, state) => {
         const refused = applyTrackChanges(state, args, changes)
         return refused
       }, {
@@ -293,7 +329,9 @@ export function buildTools(ctx) {
       void runWriteSelfCheck(ctx, { fs, policy: policyFor(exec), session: sessionOf(ctx, exec) }).catch(() => {})
 
       if (outcome.error !== undefined) return outcome.error
-      return withProbeAdvisory(outcome.result.text)
+      // The startup probe's advisory is prepended by the pipeline itself, so
+      // this tool and every other writer in the seam surface it identically.
+      return outcome.result.text
     },
   }
 
@@ -332,7 +370,7 @@ export function buildTools(ctx) {
       }
 
       let report = null
-      const outcome = await locateAndApply(fs, args.character, (located, state) => {
+      const outcome = await applyToCharacter(fs, args.character, (located, state) => {
         const before = toCopper(state.currency)
         const after = before - cost
         if (after < 0) {
@@ -361,7 +399,7 @@ export function buildTools(ctx) {
       })
 
       if (outcome.error !== undefined) return outcome.error
-      return withProbeAdvisory(outcome.result.text)
+      return outcome.result.text
     },
   }
 
@@ -417,76 +455,41 @@ export function buildTools(ctx) {
 
       const fs = getFs()
       if (fs === undefined) return 'fs service unavailable'
-      const session = sessionOf(ctx, exec)
-      // The narrative write goes through the SAME policy threading as every
-      // other writer: without the session's resolved policy as writeText's 5th
-      // argument, the sandbox judges the path against the process cwd and
-      // refuses the session workspace (the defect that made 0.4.1's
-      // dnd_character_update 100% unusable).
-      const sandboxPolicy = writePolicyFor(ctx, exec)
 
-      const outcome = await locateCharacter(fs, args.character, session)
-      if (outcome.error !== undefined) return outcome.error
-      const dir = outcome.dir
-      const campaign = outcome.campaign
-      const name = outcome.name
-      const character = outcome.character
-
-      // One writer at a time per character, same chain dnd_track uses: a
-      // narrative edit racing a slot expenditure must compose, not clobber.
-      return withCharacterLock(campaign + '/' + name, async () => {
-        const sheetText = await readTextOrUndefined(fs, sheetPath(dir, name))
+      // The narrative edit enters the SAME seam as every other writer:
+      // applyToCharacter resolves the character, takes the per-character lock
+      // (so a narrative edit racing a slot expenditure composes, not clobbers)
+      // and performs the write with the shared clocks, policy threading,
+      // refusal diagnosis and probe advisory. This mutate only decides WHAT
+      // to write.
+      //
+      // Inside the mutate the sheet is re-read — a read, which never queues —
+      // so the gate and the section edit see the sheet as it stands INSIDE the
+      // lock, and a concurrent track write's freshly re-rendered summary
+      // cannot be clobbered by a stale snapshot taken outside it.
+      const outcome = await applyToCharacter(fs, args.character, async (located) => {
+        const sheetText = await readTextOrUndefined(fs, sheetPath(located.dir, located.name))
         if (sheetText === undefined) {
-          return 'No sheet file for "' + name + '" in ' + campaign + ' (characters/' + name + '.md). Build one with dnd_character_create.'
+          return { refuse: 'No sheet file for "' + located.name + '" in ' + located.campaign + ' (characters/' + located.name + '.md). Build one with dnd_character_create.' }
         }
-        const sheet = splitSheet(sheetText, { name })
-
-        const structured = (h) => STRUCTURED_SECTIONS.some((s) => String(h).toLowerCase().startsWith(s))
-        const isGenerated = (h) => h === 'generated' || h === '/dsh-dnd:generated'
-        const wanted = sectionName.toLowerCase()
-        const idx = sheet.sections.findIndex((s) => s.heading !== null && !isGenerated(s.heading) && s.heading.toLowerCase() === wanted)
-
-        // The gate. A structured hit is a refusal WITH DIRECTIONS, because the
-        // request is legitimate — the route is just not this tool. Editing the
-        // .md copy of a structured section changes prose that nothing reads:
-        // the state file decides every number, and the summary re-renders from
-        // it. Both refusals below name the tool that does own the change.
-        if (idx === -1) {
-          // The sheet was born through writeCharacter, so its structured
-          // sections have MOVED to the state file and are no longer headings
-          // here. The gate must therefore also recognise a structured NAME
-          // directly — "Combat Stats" is still not this tool's business.
-          const structuredHit = structured(sectionName)
-            || sheet.sections.some((s) => s.heading !== null && !isGenerated(s.heading)
-              && structured(s.heading)
-              && (String(s.heading).toLowerCase().includes(wanted) || wanted.includes(String(s.heading).toLowerCase())))
-          if (structuredHit) {
-            return 'REFUSED: "' + sectionName + '" is a STRUCTURED section — the state file is the authority, and editing the sheet copy changes text nothing reads. '
-              + 'Numbers: dnd_track (hp, tempHp, spellSlots, spells, xp, conditions, resource) or dnd_spend. '
-              + 'Building or rebuilding the card: dnd_character_create. Nothing was written.'
-          }
-          const narrativeHeads = sheet.sections
-            .filter((s) => s.heading !== null && !isGenerated(s.heading) && !structured(s.heading))
-            .map((s) => s.heading)
-          if (args.create === true && op === 'set-section') {
-            sheet.sections.push({ heading: sectionName, level: 2, body: '', raw: '## ' + sectionName + '\n' })
-            return await applyCharacterNarrative(fs, dir, name, character, sheet, {
-              op, body, text, match, created: true, index: sheet.sections.length - 1, sandboxPolicy,
-            })
-          }
-          return 'No section "' + sectionName + '" in ' + name + '. Narrative sections: ' + (narrativeHeads.join('; ') || 'none') + '. '
-            + 'Pass create:true with op "set-section" to add a new one. Nothing was written.'
-        }
-        if (structured(sheet.sections[idx].heading)) {
-          return 'REFUSED: "' + sheet.sections[idx].heading + '" is a STRUCTURED section — the state file is the authority, and editing the sheet copy changes text nothing reads. '
-            + 'Numbers: dnd_track (hp, tempHp, spellSlots, spells, xp, conditions, resource) or dnd_spend. '
-            + 'Building or rebuilding the card: dnd_character_create. Nothing was written.'
-        }
-
-        return await applyCharacterNarrative(fs, dir, name, character, sheet, {
-          op, body, text, match, created: false, index: idx, sandboxPolicy,
+        return planNarrativeEdit(splitSheet(sheetText, { name: located.name }), {
+          name: located.name,
+          campaign: located.campaign,
+          op, section: sectionName, body, text, match,
+          create: args.create === true,
         })
+      }, {
+        // No idempotency key: the narrative path carries none, and a repeated
+        // identical edit is refused as a no-op by content, not by key.
+        sandboxPolicy: policyFor(exec),
+        session: sessionOf(ctx, exec),
       })
+      if (outcome.error !== undefined) return outcome.error
+      let out = outcome.result.text
+      // The pipeline reports write warnings separately; the narrative result
+      // has always surfaced them on the text, so they ride here.
+      for (const line of outcome.result.warnings ?? []) out += '\n' + line
+      return out
     },
   }
 

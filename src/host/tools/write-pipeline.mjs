@@ -30,7 +30,7 @@
  * suite pin their invariants HERE, so a defect in any of the six surfaces at
  * one interface instead of hiding in a per-tool reimplementation. This module
  * carries no tool definitions of its own — the tools live in their families
- * (track, rest, levelup, roll, effects) and enter through `locateAndApply`.
+ * (track, rest, levelup, roll, effects) and enter through `applyToCharacter`.
  */
 
 import { activeCampaignDir } from './shared.mjs'
@@ -39,6 +39,25 @@ import { readCharacter, writeCharacter, listCharacters } from './state-io.mjs'
 import { formatFindings } from './state-rules.mjs'
 import { normalizeState, MAX_APPLIED_KEYS } from './state-schema.mjs'
 import { withWriteDiagnosis } from './write-errors.mjs'
+import { writeProbeState } from './write-probe.mjs'
+
+/**
+ * Prepend the startup probe's warning to a write's result text.
+ *
+ * The advisory is the PIPELINE's job, not a per-tool chore: a writer that
+ * enters the seam (track, spend, rest, level-up, the attack target, the
+ * narrative editor) surfaces it identically, because the failure it warns
+ * about — "the tool answered but nothing was saved" — is a property of the
+ * write path, not of any one tool. Returning undefined from the probe state
+ * (unit tests, no mount) shows nothing, which is the honest default.
+ *
+ * @param text - the write's normal result text.
+ * @returns the text, with the advisory prepended when there is one.
+ */
+function withProbeAdvisory(text) {
+  const note = writeProbeState()?.note()
+  return note === undefined ? text : note + '\n\n' + text
+}
 
 /**
  * Build a keyed promise-chain lock: one `work` at a time per key, whole
@@ -140,10 +159,14 @@ export function matchCharacter(listed, requested, campaign) {
  * above the characters directory every caller receives, and guessing the path
  * per tool is how `dnd_character_update` came to stamp `worldTime: null`.
  *
+ * Exported for the one writer that cannot enter through `applyToCharacter` —
+ * character creation has no existing target to resolve — so the two-clock rule
+ * holds there too without a second copy of the walk.
+ *
  * @param fs - the host fs service.
  * @param charactersDir - the campaign's characters directory.
  */
-function campaignCalendar(fs, charactersDir) {
+export function campaignCalendar(fs, charactersDir) {
   return readCalendar(fs, `${charactersDir}/..`)
 }
 
@@ -202,8 +225,15 @@ async function writeOptions(fs, located) {
  *
  * @param fs - the host fs service.
  * @param located - the located character.
- * @param mutate - `(state) => undefined`; mutates the state in place, or
- *   returns an object `{ refuse: string }` to stop without writing.
+ * @param mutate - `(state) => undefined | { refuse } | { narrative, note }`;
+ *   MAY be async. Mutates the state in place and returns nothing to write
+ *   normally, or:
+ *   - `{ refuse: string }` stops without writing anything; the text is
+ *     reported verbatim. A no-op edit is a refusal too — stamping both clocks
+ *     on a character nothing happened to is a defect, not a success.
+ *   - `{ narrative: string, note?: string }` writes the given narrative
+ *     INSTEAD of the located character's (the narrative editor rebuilt the
+ *     prose from the sheet), with `note` as the default result text.
  * @param options - `{ key }` for idempotency, an optional `now`, and
  *   `sandboxPolicy` (the calling session's resolved policy; see state-io.mjs
  *   and session-scope.mjs for why the write path needs it and the read path
@@ -221,12 +251,23 @@ async function applyChange(fs, located, mutate, options = {}) {
     : String(options.key).trim()
   const recorded = key !== null ? recordAppliedKey(existingKeys, key) : { duplicate: false, next: existingKeys }
   if (recorded.duplicate) {
-    return { ok: true, duplicate: true, text: `Already applied (key "${key}"); nothing changed. No second charge.` }
+    return { ok: true, duplicate: true, text: withProbeAdvisory(`Already applied (key "${key}"); nothing changed. No second charge.`) }
   }
 
-  const refusal = mutate(state)
+  // `await` on a synchronous mutate's return value is the value itself, so a
+  // sync mutate costs nothing — but an async one (a caller that re-reads the
+  // sheet inside the lock, where reads never queue) is what the narrative
+  // editor needs to be.
+  const refusal = await mutate(state)
   if (refusal !== undefined && refusal !== null && typeof refusal.refuse === 'string') {
-    return { ok: false, refused: true, text: refusal.refuse }
+    return { ok: false, refused: true, text: withProbeAdvisory(refusal.refuse) }
+  }
+
+  let narrative = located.character.narrative
+  let note
+  if (refusal !== undefined && refusal !== null && typeof refusal.narrative === 'string') {
+    narrative = refusal.narrative
+    if (typeof refusal.note === 'string') note = refusal.note
   }
 
   if (key !== null) {
@@ -240,7 +281,7 @@ async function applyChange(fs, located, mutate, options = {}) {
   // as `cause`.
   const written = await withWriteDiagnosis(async () => writeCharacter(fs, located.dir, located.name, {
     state,
-    narrative: located.character.narrative,
+    narrative,
     ...(await writeOptions(fs, located)),
     now: options.now ?? new Date(),
     sandboxPolicy: options.sandboxPolicy,
@@ -253,7 +294,7 @@ async function applyChange(fs, located, mutate, options = {}) {
       ok: false,
       refused: true,
       findings: written.findings,
-      text: `Refused, nothing written — the change would produce an impossible state.\n${written.reason}`,
+      text: withProbeAdvisory(`Refused, nothing written — the change would produce an impossible state.\n${written.reason}`),
     }
   }
 
@@ -264,7 +305,9 @@ async function applyChange(fs, located, mutate, options = {}) {
     findings: written.findings,
     warnings: formatFindings(warns),
     written: written.written,
-    text: options.describe !== undefined ? options.describe(state) : 'Written.',
+    text: withProbeAdvisory(
+      options.describe !== undefined ? options.describe(state) : (note ?? 'Written.'),
+    ),
   }
 }
 
@@ -277,6 +320,11 @@ export const withCharacterLock = makeLockChain()
 
 /**
  * Locate a character and apply a change under that character's lock.
+ *
+ * This is the pipeline's canonical entry: the track, spend, rest, level-up and
+ * attack-target writers AND the narrative editor (dnd_character_update) all
+ * enter through it, so resolution, locking, idempotency, both clocks, refusal
+ * diagnosis and the probe advisory are inherited, never re-implemented.
  *
  * Both halves are inside the lock, and that is the point: the read in
  * `locateCharacter` has to be serialized with the write in `applyChange`, or two
@@ -305,13 +353,17 @@ export const withCharacterLock = makeLockChain()
  *
  * @param fs - the host fs service.
  * @param requested - the caller's `character` argument.
- * @param mutate - `(located, state) => undefined | { refuse }`. Receives the
- *   located character so a refusal message can name the sheet stem (`alice`).
+ * @param mutate - `(located, state) => undefined | { refuse } |
+ *   { narrative, note }`; MAY be async. Receives the located character so a
+ *   refusal message can name the sheet stem (`alice`). An async mutate may
+ *   re-read the sheet inside the lock (`readTextOrUndefined` + `splitSheet` —
+ *   reads never queue) to gate on the structured sections and edit them, as
+ *   the narrative editor does; the no-op rule holds there too, as a refusal.
  * @param options - `{ key, describe, sandboxPolicy }`, as `applyChange`
  *   takes. `describe` is called with `(state, located)`.
  * @returns `{ result }` or `{ error }`.
  */
-export async function locateAndApply(fs, requested, mutate, options = {}) {
+export async function applyToCharacter(fs, requested, mutate, options = {}) {
   // Resolve the character to a stem OUTSIDE the lock, purely to build a stable
   // key. This is a directory-level read, not a state read.
   const located0 = await locateCharacter(fs, requested, options.session)

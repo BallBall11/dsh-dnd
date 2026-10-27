@@ -3,7 +3,7 @@
  *
  * Pure computation: state in, change list out, never a write. The tool
  * (rest.mjs) resolves the campaign and the character, then persists through
- * track.mjs's locateAndApply, so the rules here are testable with no
+ * track.mjs's applyToCharacter, so the rules here are testable with no
  * filesystem at all.
  *
  * ## Which ruleset says what

@@ -28,6 +28,7 @@ process.env.DND_ROOT ??= 'D:/DND' // direct execute() calls have no session; the
 import { tempCampaign } from './support/temp-campaign.mjs'
 import { buildTools as buildTrackTools } from '../src/host/tools/track.mjs'
 import { buildTools as buildRestTools } from '../src/host/tools/rest.mjs'
+import { buildTools as buildCreateTools } from '../src/host/tools/character-create.mjs'
 import { splitSheet } from '../src/host/tools/sheet-split.mjs'
 
 // formatWorldTime({ day: 2, month: 3, year: 1247, hour: 8, months: [...] }),
@@ -101,4 +102,45 @@ await test('dnd_character_update stamps both clocks and preserves worldTime', as
     assert.match(out, /Appended/, 'the narrative edit must land: ' + out)
     assertBothClocks(camp, 'quill')
   })
+})
+
+await test('dnd_character_create stamps both clocks and preserves worldTime', async () => {
+  await withCampaign(async (camp) => {
+    // No `klass`: the class skeleton lives in the package dataset, outside the
+    // temp workspace, and this test is about the clocks, not the skeleton.
+    const create = buildCreateTools(trackCtx(camp)).find((t) => t.name === 'dnd_character_create')
+    const out = String(await create.execute({ name: 'Mira', hp: 10, ac: 12, abilities: { STR: 10 } }))
+    assert.match(out, /Created Mira/, 'the create must land: ' + out)
+    assertBothClocks(camp, 'mira')
+  })
+})
+
+await test('a refused startup probe prepends its advisory through the pipeline', async () => {
+  // The advisory is the pipeline's job now, so every writer that enters the
+  // seam — rest and the narrative writer included — surfaces it, not just the
+  // track family. The published probe state is the module's documented
+  // interface (a mount publishes it); the test publishes a refused one and
+  // restores whatever the process had.
+  const probe = await import('../src/host/tools/write-probe.mjs')
+  const previous = probe.writeProbeState()
+  try {
+    await withCampaign(async (camp) => {
+      const published = probe.createProbeState()
+      published.set({ status: probe.PROBE_REFUSED, path: camp.campaignDir, message: 'probe refused (fixture)' })
+      probe.setWriteProbeState(published)
+
+      const rest = buildRestTools(trackCtx(camp)).find((t) => t.name === 'dnd_rest')
+      const out = String(await rest.execute({ kind: 'long', character: 'quill' }))
+      assert.match(out, /^WARNING: the startup write self-check was REFUSED/, 'rest must surface the advisory: ' + out)
+      assert.match(out, /probe refused \(fixture\)/)
+      assert.match(out, /LONG rest/, 'the advisory must prepend, not replace, the report: ' + out)
+
+      const update = buildTrackTools(trackCtx(camp)).find((t) => t.name === 'dnd_character_update')
+      const upd = String(await update.execute({ op: 'append', section: 'Character Pillar', text: 'Still owes the innkeeper.' }))
+      assert.match(upd, /^WARNING: the startup write self-check was REFUSED/, 'the narrative writer must surface it too: ' + upd)
+      assert.match(upd, /Appended/, 'the advisory must prepend, not replace, the report: ' + upd)
+    })
+  } finally {
+    probe.setWriteProbeState(previous)
+  }
 })
