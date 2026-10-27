@@ -27,7 +27,7 @@
  */
 
 import { activeCampaignDir, readCampaignRuleset, DATA_ROOT, readTextOrUndefined, parseJsonLoose } from './shared.mjs'
-import { locateAndApply } from './track.mjs'
+import { locateAndApply } from './write-pipeline.mjs'
 import { readCharacter, listCharacters } from './state-io.mjs'
 import { sessionOf, writePolicyFor } from './session-scope.mjs'
 import { abilityMod } from './rest-rules.mjs'

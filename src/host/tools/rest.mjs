@@ -26,7 +26,7 @@
  */
 
 import { activeCampaignDir, readCampaignRuleset } from './shared.mjs'
-import { locateAndApply } from './track.mjs'
+import { locateAndApply } from './write-pipeline.mjs'
 import { readAllCharacters } from './state-io.mjs'
 import { parseDice, rollParsed } from './roll.mjs'
 import { spendHitDice, applyLongRest } from './rest-rules.mjs'
