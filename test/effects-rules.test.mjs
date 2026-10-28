@@ -1,11 +1,11 @@
 ﻿/**
- * effects-rules tests 鈥?the PURE half of timed effects, concentration and death
+ * effects-rules tests — the PURE half of timed effects, concentration and death
  * saves.
  *
  * Everything asserted here is a function of its arguments: no filesystem, no
  * clock, no campaign. That is the property the module was designed around (see
  * the header of src/host/tools/effects.mjs, sections 2 and 3), and it is what
- * makes these tests worth having 鈥?a rule can be pinned by calling one function
+ * makes these tests worth having — a rule can be pinned by calling one function
  * with a literal.
  *
  * These are MUTATION-CHECKED. Each block was written so that deliberately
@@ -84,7 +84,7 @@ await test('renders a duration with a singular for exactly one', () => {
 })
 
 console.log('')
-console.log('tick 鈥?the pure decrement rule:')
+console.log('tick — the pure decrement rule:')
 
 await test('a 5-round effect expires on the FIFTH round tick, not the fourth', () => {
   // The off-by-one that matters: an effect with 5 rounds left must still be
@@ -157,7 +157,7 @@ await test('ticking with no elapsed time is a no-op, and says so', () => {
   assert.equal(elapsedSeconds({ rounds: -1 }), 0, 'a negative elapsed time is not a rewind')
 })
 
-await test('tickEffects MUTATES nothing 鈥?the input is untouched', () => {
+await test('tickEffects MUTATES nothing — the input is untouched', () => {
   // Purity is the property the whole design rests on. If tickEffects edited its
   // input in place, a caller that ticked and then failed to save would have
   // already destroyed its own snapshot, and no test could tell.
@@ -180,7 +180,7 @@ await test('secondsToDuration keeps the declared unit only while it is EXACT', (
 })
 
 console.log('')
-console.log('concentration 鈥?the save it forces:')
+console.log('concentration — the save it forces:')
 
 await test('breakSaveDc is max(10, half the damage), with the half rounded DOWN', () => {
   // SRD 5.2, Concentration. The floor is what keeps 21 damage at DC 10: half is
@@ -219,7 +219,7 @@ await test('effectMatches ignores case but not identity', () => {
 })
 
 console.log('')
-console.log('death saves 鈥?the tally and the verdicts:')
+console.log('death saves — the tally and the verdicts:')
 
 await test('a THIRD failure produces the death verdict, and the second does not', () => {
   const second = applyDeathSave({ successes: 0, failures: 1 }, 'failure', 5)

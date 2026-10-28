@@ -1,11 +1,11 @@
 /**
- * encounter-effects tests 鈥?the WRITE path of dnd_effect / dnd_concentration /
+ * encounter-effects tests — the WRITE path of dnd_effect / dnd_concentration /
  * dnd_death_save, end to end through each tool's real execute().
  *
  * ## Why this file owns its input instead of using the scratch campaign
  *
  * `shared.mjs` hard-codes DND_ROOT = 'D:/DND' and ACTIVE_MARKER, and
- * `activeCampaignDir()` builds its path from those constants alone 鈥?NOT from
+ * `activeCampaignDir()` builds its path from those constants alone — NOT from
  * anything the caller passes. So pointing a mock fs at a temp directory is not
  * enough: the tools would still resolve the LIVE campaign named by the marker
  * and write there.
@@ -177,7 +177,7 @@ const liveBefore = snapshotTree(LIVE_CHARS)
 const liveMarkerBefore = hashLivePath(LIVE_MARKER)
 const liveMarkerExisted = liveExists(LIVE_MARKER)
 
-console.log('dnd_effect 鈥?start / tick / end:')
+console.log('dnd_effect — start / tick / end:')
 
 await test('an effect starts with a duration and reads back', async () => {
   const out = await call('dnd_effect', { name: 'Bless', duration: '5r' })
@@ -322,7 +322,7 @@ await test('a party tick does NOT create an encounter for a character with none'
 })
 
 console.log('')
-console.log('dnd_concentration 鈥?establish, break (with the forced save), end:')
+console.log('dnd_concentration — establish, break (with the forced save), end:')
 
 await test('concentration can be established on a running effect', async () => {
   await call('dnd_effect', { action: 'end', name: 'Bless' })
@@ -357,7 +357,7 @@ await test('a break with no damage records the break without inventing a DC', as
   assert.equal(readEncounterFile('alice').sections.concentration, null)
 })
 
-await test('breaking an effect keeps its TIMER 鈥?only the focus is lost', async () => {
+await test('breaking an effect keeps its TIMER — only the focus is lost', async () => {
   await call('dnd_effect', { action: 'end', name: 'Bless' })
   await call('dnd_effect', { name: 'Bless', duration: '10r', concentration: true })
   await call('dnd_concentration', { action: 'break', damage: 12 })
@@ -412,7 +412,7 @@ await test('concentration status reports honestly when nothing is running', asyn
 })
 
 console.log('')
-console.log('dnd_death_save 鈥?the tally, the verdicts and the sheet mirror:')
+console.log('dnd_death_save — the tally, the verdicts and the sheet mirror:')
 
 await test('three failures produce an explicit DEAD conclusion', async () => {
   await call('dnd_death_save', { action: 'reset' })
@@ -476,7 +476,7 @@ await test('an unknown death-save action is refused', async () => {
 })
 
 console.log('')
-console.log('idempotency 鈥?the advertised `key` must actually do something:')
+console.log('idempotency — the advertised `key` must actually do something:')
 //
 // Every one of these three tools ADVERTISES a `key` parameter ("Repeating a
 // call with the same key changes nothing the second time"). At the time these
@@ -494,20 +494,20 @@ await test('a retried death save with the SAME key does NOT advance the tally', 
   const retry = await call('dnd_death_save', { action: 'failure', key: 'test-retry-1' })
   assert.match(retry, /Already applied/, 'the retry must be reported as a duplicate: ' + retry)
   assert.equal(readEncounterFile('alice').sections.deathSaves.failures, 1,
-    'a retried death save must not add a second failure 鈥?this is the difference between dying and DEAD')
+    'a retried death save must not add a second failure — this is the difference between dying and DEAD')
 
   // And the sheet mirror must not have moved either.
   const state = JSON.parse(readFileSync(nodePath(CHAR_DIR + '/alice.state.json'), 'utf8'))
   assert.equal(state.combat.deathSaves.failures, 1, 'the sheet mirror must not double-count the retry')
 })
 
-await test('a DIFFERENT key still applies 鈥?keyed idempotency is not a blanket no-op', async () => {
+await test('a DIFFERENT key still applies — keyed idempotency is not a blanket no-op', async () => {
   const out = await call('dnd_death_save', { action: 'failure', key: 'test-retry-2' })
   assert.match(out, /0\/1 -> 0\/2/, out)
   assert.equal(readEncounterFile('alice').sections.deathSaves.failures, 2)
 })
 
-await test('omitting the key applies EVERY time 鈥?the correct default', async () => {
+await test('omitting the key applies EVERY time — the correct default', async () => {
   // A DM calling dnd_death_save three times without keys means three saves, not
   // one. Keyed idempotency must not turn into "only the first call counts".
   await call('dnd_death_save', { action: 'reset' })
@@ -588,7 +588,7 @@ await test('a READ-ONLY call neither checks nor records a key', async () => {
 })
 
 console.log('')
-console.log('the shared file 鈥?neither family may destroy the other:')
+console.log('the shared file — neither family may destroy the other:')
 
 await test('THIS family writes only its own sections; initiative survives byte-intact', async () => {
   // This is the invariant the shared-file design exists to protect, and the one
@@ -674,13 +674,13 @@ await test('a corrupt encounter file is reported, not silently treated as empty'
 })
 
 console.log('')
-console.log('the write path 鈥?policy threading and read-only discipline:')
+console.log('the write path — policy threading and read-only discipline:')
 
 await test('every write carries a sandbox policy as the 5th fs.writeText argument', async () => {
   // The defect recorded in session-scope.mjs: a write that omits the 5th
   // argument is judged against the harness process cwd instead of the session,
   // and every campaign write is refused. This suite passes no exec, so the
-  // resolved policy is undefined 鈥?but the ARGUMENT must still be threaded
+  // resolved policy is undefined — but the ARGUMENT must still be threaded
   // through, which is what a real session fills in.
   writes.length = 0
   await call('dnd_effect', { name: 'Probe', duration: '3r' })
@@ -720,7 +720,7 @@ await test('a session IS threaded through when one is supplied', async () => {
 
 await test('a READ-ONLY call performs no write at all', async () => {
   // status / list are reads. If either wrote, a DM asking a question would
-  // mutate the fight 鈥?and the death-save status path is literally one line
+  // mutate the fight — and the death-save status path is literally one line
   // away from the writing path.
   writes.length = 0
   await call('dnd_concentration', { action: 'status' })
@@ -780,7 +780,7 @@ await test('the live active-campaign marker is byte-identical', () => {
     return
   }
   assert.equal(hashLivePath(LIVE_MARKER), liveMarkerBefore,
-    'the live marker must be untouched 鈥?this suite points its own temp marker instead')
+    'the live marker must be untouched — this suite points its own temp marker instead')
 })
 
 console.log('')
