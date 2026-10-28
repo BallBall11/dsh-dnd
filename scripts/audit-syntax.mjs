@@ -11,9 +11,9 @@
  * and concatenates into lib/client.js — its top-level `return` is the
  * contract (see src/client/index.js). Bare `node --check` would misread it
  * as CommonJS, and even as ESM would reject the contract-legal `return`. So
- * fragments are parsed the way the build consumes them: wrapped in an async
- * function (its body allows both `return` and `await`) and still handed to
- * `node --check` — the real parser, no reimplementation.
+ * fragments are parsed inside the same wrap the build applies — a PLAIN
+ * function, matching scripts/build.mjs. Top-level `await` therefore fails
+ * here, as it should: the shipped program would throw at load time.
  *
  * Run: node scripts/audit-syntax.mjs   (wired as the FIRST step of `npm run check`)
  *
@@ -42,6 +42,10 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// Rel paths allowed to fail the check. Empty by design; if a file ever must
+// carry deliberately-invalid syntax, add it here WITH the reason on the line.
+const ALLOWLIST = new Set()
+
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry)
@@ -60,14 +64,15 @@ for (const dir of ['src', 'scripts', 'test']) {
 
 /**
  * The text to parse for one file. Client fragments get the build's own
- * wrapper; the opening brace shares the body's first line so `[stdin]` line
- * numbers in an error still match the file's.
+ * wrapper — a plain function, exactly as scripts/build.mjs wraps them; the
+ * opening brace shares the body's first line so `[stdin]` line numbers in an
+ * error still match the file's.
  */
 function checkInput(file) {
   const text = readFileSync(file, 'utf8')
   const rel = path.relative(ROOT, file).replace(/\\/g, '/')
   if (rel.startsWith('src/client/') && rel.endsWith('.js')) {
-    return `(async function () {` + text + `\n})`
+    return `(function () {` + text + `\n})`
   }
   return text
 }
@@ -75,6 +80,7 @@ function checkInput(file) {
 const failures = []
 for (const file of files) {
   const rel = path.relative(ROOT, file).replace(/\\/g, '/')
+  if (ALLOWLIST.has(rel)) continue
   const result = spawnSync(process.execPath, ['--check', '--input-type=module'], {
     input: checkInput(file),
     encoding: 'utf8',
